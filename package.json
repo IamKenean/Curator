@@ -1,0 +1,11 @@
+{
+  "name": "curator-root",
+  "private": true,
+  "scripts": {
+    "start": "npm --prefix ./Curator start",
+    "start:tunnel": "npm --prefix ./Curator run start:tunnel",
+    "ios": "npm --prefix ./Curator run ios",
+    "typecheck": "npm --prefix ./Curator run typecheck",
+    "lint": "npm --prefix ./Curator run lint"
+  }
+}

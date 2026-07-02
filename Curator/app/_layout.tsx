@@ -1,0 +1,48 @@
+import { Stack } from "expo-router";
+import { StatusBar } from "expo-status-bar";
+import { SafeAreaProvider } from "react-native-safe-area-context";
+import { ConfigErrorScreen } from "../src/components/ConfigErrorScreen";
+import { getBlockingEnvIssues } from "../src/lib/env";
+import { AuthProvider } from "../src/providers/AuthProvider";
+import { NotificationProvider } from "../src/providers/NotificationProvider";
+import { colors } from "../src/theme";
+
+export default function RootLayout() {
+  const configIssues = getBlockingEnvIssues();
+
+  if (configIssues.length > 0) {
+    return (
+      <>
+        <StatusBar style="light" />
+        <ConfigErrorScreen />
+      </>
+    );
+  }
+
+  return (
+    <SafeAreaProvider>
+      <AuthProvider>
+        <NotificationProvider>
+          <StatusBar style="light" />
+          <Stack
+        screenOptions={{
+          headerStyle: { backgroundColor: colors.background },
+          headerTintColor: colors.text,
+          headerTitleStyle: { fontWeight: "800" },
+          contentStyle: { backgroundColor: colors.background }
+        }}
+      >
+        <Stack.Screen name="index" options={{ headerShown: false }} />
+        <Stack.Screen name="auth/sign-in" options={{ title: "Sign In" }} />
+        <Stack.Screen name="auth/sign-up" options={{ title: "Sign Up" }} />
+        <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
+        <Stack.Screen name="sent" options={{ title: "Sent" }} />
+        <Stack.Screen name="rated" options={{ title: "Rated" }} />
+        <Stack.Screen name="responses" options={{ title: "Responses" }} />
+        <Stack.Screen name="category/[slug]" options={{ title: "Browse" }} />
+        </Stack>
+        </NotificationProvider>
+      </AuthProvider>
+    </SafeAreaProvider>
+  );
+}

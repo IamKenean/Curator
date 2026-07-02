@@ -1,0 +1,7 @@
+# Editor / local tooling
+.cursor/
+*.txt
+
+# OS
+.DS_Store
+Thumbs.db
