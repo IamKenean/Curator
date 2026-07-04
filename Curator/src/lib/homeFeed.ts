@@ -113,3 +113,18 @@ export async function getHomeFeed(userId: string): Promise<HomeFeed> {
 
   return fillHomeFeedWithMocks(feed);
 }
+
+export async function getNewFromFriendsActivity(userId: string): Promise<FriendActivityFeedItem[]> {
+  const raw = await safeRpc<FriendActivityFeedItem>("get_new_from_friends", { p_user_id: userId });
+  const hydrated = await hydrateTitles(raw);
+  const feed = await fillHomeFeedWithMocks({
+    friendsRatedHighly: [],
+    popularThisWeek: [],
+    newFromFriends: hydrated,
+    highTrustFriends: [],
+    trustedRecommenders: [],
+    tasteMatches: []
+  });
+
+  return feed.newFromFriends;
+}

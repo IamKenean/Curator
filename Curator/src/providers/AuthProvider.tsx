@@ -2,6 +2,7 @@ import type { Session, User } from "@supabase/supabase-js";
 import { createContext, useCallback, useContext, useEffect, useMemo, useState, type PropsWithChildren } from "react";
 import { supabase } from "../lib/supabase";
 import { clearNotificationStateForSignOut } from "../lib/notifications";
+import { clearPutMeOnNotificationStateForSignOut } from "../lib/putMeOnNotifications";
 import type { UserProfile } from "../types";
 
 type AuthContextValue = {
@@ -97,7 +98,11 @@ export function AuthProvider({ children }: PropsWithChildren) {
       loading,
       refreshProfile,
       signOut: async () => {
+        const userId = session?.user.id;
         await clearNotificationStateForSignOut();
+        if (userId) {
+          await clearPutMeOnNotificationStateForSignOut(userId);
+        }
         await supabase.auth.signOut();
       }
     }),

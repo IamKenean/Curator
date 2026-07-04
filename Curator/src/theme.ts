@@ -1,13 +1,6 @@
-export const colors = {
-  background: "#0F0F0F",
-  card: "#1A1A1A",
-  accent: "#E63946",
-  star: "#E50914",
-  text: "#F5F5F5",
-  muted: "#A7A7A7",
-  border: "#2A2A2A",
-  success: "#51CF66"
-};
+export { defaultColors as colors } from "./theme/colorSchemes";
+export type { ColorScheme, ThemeMode } from "./theme/colorSchemes";
+export { palette, paletteSwatches, superDarkColors } from "./theme/colorSchemes";
 
 export const spacing = {
   xs: 4,

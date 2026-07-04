@@ -108,7 +108,7 @@ export default function HomeScreen() {
   }
 
   return (
-    <Screen scroll stickyHeaderIndices={[0]}>
+    <Screen scroll stickyHeaderIndices={[0]} edges={["top", "left", "right"]}>
       <View style={styles.appHeader}>
         <Text style={styles.appTitle}>Curator</Text>
       </View>

@@ -1,4 +1,4 @@
-import { useEffect, useRef, type ReactNode } from "react";
+import { useEffect, useMemo, useRef, type ReactNode } from "react";
 import {
   Platform,
   ScrollView,
@@ -10,7 +10,8 @@ import {
   type ViewStyle
 } from "react-native";
 import { SafeAreaView, type Edge } from "react-native-safe-area-context";
-import { colors, spacing } from "../theme";
+import { useTheme } from "../providers/ThemeProvider";
+import { spacing } from "../theme";
 
 type ScreenProps = {
   title?: string;
@@ -20,6 +21,7 @@ type ScreenProps = {
   stickyHeaderIndices?: ScrollViewProps["stickyHeaderIndices"];
   edges?: Edge[];
   contentContainerStyle?: StyleProp<ViewStyle>;
+  fill?: boolean;
 };
 
 export function Screen({
@@ -29,9 +31,12 @@ export function Screen({
   scrollEnabled = true,
   stickyHeaderIndices,
   edges,
-  contentContainerStyle
+  contentContainerStyle,
+  fill = false
 }: ScreenProps) {
+  const { colors } = useTheme();
   const scrollRef = useRef<ScrollView>(null);
+  const styles = useMemo(() => createStyles(colors), [colors]);
 
   useEffect(() => {
     if (Platform.OS === "web") {
@@ -50,7 +55,7 @@ export function Screen({
           keyboardShouldPersistTaps="always"
           keyboardDismissMode="on-drag"
           nestedScrollEnabled
-          contentContainerStyle={[styles.scrollContent, contentContainerStyle]}
+          contentContainerStyle={[styles.scrollContent, fill && styles.fillContent, contentContainerStyle]}
           stickyHeaderIndices={stickyHeaderIndices}
         >
           {title ? <Text style={styles.title}>{title}</Text> : null}
@@ -70,25 +75,30 @@ export function Screen({
   );
 }
 
-const styles = StyleSheet.create({
-  safe: {
-    backgroundColor: colors.background,
-    flex: 1
-  },
-  scrollContent: {
-    gap: spacing.xl,
-    padding: spacing.lg,
-    paddingBottom: spacing.xl * 3
-  },
-  content: {
-    flex: 1,
-    gap: spacing.lg,
-    padding: spacing.lg
-  },
-  title: {
-    color: colors.text,
-    fontSize: 32,
-    fontWeight: "800",
-    letterSpacing: -0.8
-  }
-});
+function createStyles(colors: ReturnType<typeof useTheme>["colors"]) {
+  return StyleSheet.create({
+    safe: {
+      backgroundColor: colors.background,
+      flex: 1
+    },
+    scrollContent: {
+      gap: spacing.xl,
+      padding: spacing.lg,
+      paddingBottom: spacing.xl * 3
+    },
+    fillContent: {
+      flexGrow: 1
+    },
+    content: {
+      flex: 1,
+      gap: spacing.lg,
+      padding: spacing.lg
+    },
+    title: {
+      color: colors.text,
+      fontSize: 32,
+      fontWeight: "800",
+      letterSpacing: -0.8
+    }
+  });
+}

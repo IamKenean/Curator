@@ -2,6 +2,7 @@ import * as Notifications from "expo-notifications";
 import { useRouter } from "expo-router";
 import { createContext, useContext, useEffect, type PropsWithChildren } from "react";
 import { AppState } from "react-native";
+import { deliverPendingPutMeOnNotifications } from "../lib/putMeOnNotifications";
 import {
   configureNotifications,
   ensureNotificationPermissions,
@@ -30,6 +31,7 @@ async function syncPendingInboxNotifications(userId: string) {
     const pending = await getIncomingPendingRecommendations(userId);
     const withSenders = await Promise.all(pending.map((item) => attachSenderProfile(item)));
     await syncInboxNotifications(withSenders);
+    await deliverPendingPutMeOnNotifications(userId);
   } catch (error) {
     console.warn("Notification sync skipped:", (error as Error).message);
   }
@@ -46,7 +48,13 @@ export function NotificationProvider({ children }: PropsWithChildren) {
   }, []);
 
   useEffect(() => {
-    const subscription = Notifications.addNotificationResponseReceivedListener(() => {
+    const subscription = Notifications.addNotificationResponseReceivedListener((response) => {
+      const type = response.notification.request.content.data?.type;
+      if (type === "put_me_on_request") {
+        router.push("/(tabs)/search");
+        return;
+      }
+
       router.push("/(tabs)");
     });
 

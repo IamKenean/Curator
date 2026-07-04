@@ -3,13 +3,12 @@ import { ActivityIndicator, Keyboard, ScrollView, StyleSheet, Text, View } from 
 import { searchTmdb } from "../lib/tmdb";
 import { colors, spacing } from "../theme";
 import type { TmdbSearchResult } from "../types";
-import { Button } from "./Button";
 import { PosterCard } from "./PosterCard";
 import { SearchField } from "./SearchField";
 
 type TmdbSearchProps = {
   selected?: TmdbSearchResult | null;
-  onSelect?: (item: TmdbSearchResult) => void;
+  onSelect?: (item: TmdbSearchResult | null) => void;
   resultsMaxHeight?: number;
   variant?: "default" | "send";
 };
@@ -20,12 +19,6 @@ export function TmdbSearch({ selected, onSelect, resultsMaxHeight, variant = "de
   const [results, setResults] = useState<TmdbSearchResult[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [isSearchOpen, setIsSearchOpen] = useState(true);
-  const collapsesOnSelect = Boolean(onSelect);
-
-  useEffect(() => {
-    setIsSearchOpen(!selected);
-  }, [selected]);
 
   useEffect(() => {
     let active = true;
@@ -65,20 +58,14 @@ export function TmdbSearch({ selected, onSelect, resultsMaxHeight, variant = "de
 
   function handleSelect(item: TmdbSearchResult) {
     Keyboard.dismiss();
-    setQuery("");
-    setResults([]);
-    setError(null);
-    if (collapsesOnSelect) {
-      setIsSearchOpen(false);
-    }
-    onSelect?.(item);
+    const isSame = selected?.id === item.id && selected.media_type === item.media_type;
+    onSelect?.(isSame ? null : item);
   }
 
-  if (collapsesOnSelect && selected && !isSearchOpen) {
+  if (onSelect && selected) {
     return (
-      <View style={styles.collapsedWrap}>
-        <PosterCard item={selected} selected />
-        <Button title="Change title" variant="ghost" onPress={() => setIsSearchOpen(true)} style={styles.changeButton} />
+      <View style={[styles.wrap, isSend && styles.wrapSend]}>
+        <PosterCard item={selected} selected onPress={() => handleSelect(selected)} />
       </View>
     );
   }
@@ -117,14 +104,6 @@ export function TmdbSearch({ selected, onSelect, resultsMaxHeight, variant = "de
 }
 
 const styles = StyleSheet.create({
-  collapsedWrap: {
-    gap: spacing.sm
-  },
-  changeButton: {
-    alignSelf: "flex-start",
-    minHeight: 40,
-    paddingHorizontal: 0
-  },
   wrap: {
     gap: spacing.md
   },
