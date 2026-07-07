@@ -1,13 +1,17 @@
 import { Link, router } from "expo-router";
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { Alert, StyleSheet, Text, View } from "react-native";
 import { Button } from "../../src/components/Button";
 import { Screen } from "../../src/components/Screen";
 import { TextField } from "../../src/components/TextField";
 import { getAuthErrorMessage, signInWithEmail } from "../../src/lib/auth";
-import { colors, spacing } from "../../src/theme";
+import { useTheme } from "../../src/providers/ThemeProvider";
+import type { ColorScheme } from "../../src/theme/colorSchemes";
+import { spacing } from "../../src/theme";
 
 export default function SignInScreen() {
+  const { colors } = useTheme();
+  const styles = useMemo(() => createStyles(colors), [colors]);
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [loading, setLoading] = useState(false);
@@ -40,18 +44,20 @@ export default function SignInScreen() {
   );
 }
 
-const styles = StyleSheet.create({
-  subtitle: {
-    color: colors.muted,
-    fontSize: 16,
-    lineHeight: 22
-  },
-  form: {
-    gap: spacing.md
-  },
-  link: {
-    color: colors.accent,
-    fontSize: 15,
-    fontWeight: "700"
-  }
-});
+function createStyles(colors: ColorScheme) {
+  return StyleSheet.create({
+    subtitle: {
+      color: colors.muted,
+      fontSize: 16,
+      lineHeight: 22
+    },
+    form: {
+      gap: spacing.md
+    },
+    link: {
+      color: colors.accent,
+      fontSize: 15,
+      fontWeight: "700"
+    }
+  });
+}

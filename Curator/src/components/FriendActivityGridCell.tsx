@@ -1,7 +1,10 @@
 import { Ionicons } from "@expo/vector-icons";
+import { useMemo } from "react";
 import { Image, StyleSheet, Text, View } from "react-native";
 import { formatStarRating } from "../lib/ratings";
-import { colors, posterBaseUrl, spacing } from "../theme";
+import { useTheme } from "../providers/ThemeProvider";
+import type { ColorScheme } from "../theme";
+import { posterBaseUrl, spacing } from "../theme";
 import type { FriendActivityFeedItem } from "../types";
 import { UserAvatar } from "./UserAvatar";
 
@@ -11,6 +14,8 @@ type FriendActivityGridCellProps = {
 };
 
 export function FriendActivityGridCell({ item, width }: FriendActivityGridCellProps) {
+  const { colors } = useTheme();
+  const styles = useMemo(() => createStyles(colors), [colors]);
   const posterUri = item.tmdb?.poster_path ? `${posterBaseUrl}${item.tmdb.poster_path}` : undefined;
   const posterHeight = width * 1.45;
 
@@ -47,49 +52,51 @@ export function FriendActivityGridCell({ item, width }: FriendActivityGridCellPr
   );
 }
 
-const styles = StyleSheet.create({
-  cell: {
-    gap: spacing.xs
-  },
-  posterWrap: {
-    position: "relative"
-  },
-  poster: {
-    backgroundColor: colors.border,
-    borderRadius: 10
-  },
-  posterFallback: {
-    alignItems: "center",
-    justifyContent: "center"
-  },
-  fallbackText: {
-    color: colors.muted,
-    fontSize: 10,
-    textAlign: "center"
-  },
-  avatarBadge: {
-    borderColor: colors.card,
-    borderRadius: 999,
-    borderWidth: 2,
-    bottom: -4,
-    left: -4,
-    position: "absolute"
-  },
-  username: {
-    color: colors.text,
-    fontSize: 11,
-    fontWeight: "800",
-    lineHeight: 14,
-    marginTop: spacing.xs
-  },
-  ratingRow: {
-    alignItems: "center",
-    flexDirection: "row",
-    gap: 2
-  },
-  rating: {
-    color: colors.star,
-    fontSize: 10,
-    fontWeight: "800"
-  }
-});
+function createStyles(colors: ColorScheme) {
+  return StyleSheet.create({
+    cell: {
+      gap: spacing.xs
+    },
+    posterWrap: {
+      position: "relative"
+    },
+    poster: {
+      backgroundColor: colors.border,
+      borderRadius: 10
+    },
+    posterFallback: {
+      alignItems: "center",
+      justifyContent: "center"
+    },
+    fallbackText: {
+      color: colors.muted,
+      fontSize: 10,
+      textAlign: "center"
+    },
+    avatarBadge: {
+      borderColor: colors.card,
+      borderRadius: 999,
+      borderWidth: 2,
+      bottom: -4,
+      left: -4,
+      position: "absolute"
+    },
+    username: {
+      color: colors.text,
+      fontSize: 11,
+      fontWeight: "800",
+      lineHeight: 14,
+      marginTop: spacing.xs
+    },
+    ratingRow: {
+      alignItems: "center",
+      flexDirection: "row",
+      gap: 2
+    },
+    rating: {
+      color: colors.star,
+      fontSize: 10,
+      fontWeight: "800"
+    }
+  });
+}

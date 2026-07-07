@@ -1,5 +1,8 @@
+import { useMemo } from "react";
 import { Image, StyleSheet, Text, View } from "react-native";
-import { colors, posterBaseUrl, spacing } from "../../theme";
+import { useTheme } from "../../providers/ThemeProvider";
+import type { ColorScheme } from "../../theme";
+import { posterBaseUrl, spacing } from "../../theme";
 import type { TmdbSearchResult } from "../../types";
 
 type HiddenPosterRowProps = {
@@ -20,6 +23,8 @@ export function HiddenPosterRow({
   size = "md",
   hidden = true
 }: HiddenPosterRowProps) {
+  const { colors } = useTheme();
+  const styles = useMemo(() => createStyles(colors), [colors]);
   const dims = SIZES[size];
 
   return (
@@ -50,37 +55,39 @@ export function HiddenPosterRow({
   );
 }
 
-const styles = StyleSheet.create({
-  row: {
-    flexDirection: "row",
-    gap: spacing.xs + 2
-  },
-  posterWrap: {
-    overflow: "hidden"
-  },
-  poster: {
-    height: "100%",
-    width: "100%"
-  },
-  posterHidden: {
-    opacity: 0.55
-  },
-  posterFallback: {
-    backgroundColor: colors.border
-  },
-  veil: {
-    ...StyleSheet.absoluteFillObject,
-    backgroundColor: "rgba(0,0,0,0.42)"
-  },
-  moreCard: {
-    alignItems: "center",
-    backgroundColor: colors.card,
-    borderColor: colors.border,
-    borderWidth: 1,
-    justifyContent: "center"
-  },
-  moreText: {
-    color: colors.muted,
-    fontWeight: "800"
-  }
-});
+function createStyles(colors: ColorScheme) {
+  return StyleSheet.create({
+    row: {
+      flexDirection: "row",
+      gap: spacing.xs + 2
+    },
+    posterWrap: {
+      overflow: "hidden"
+    },
+    poster: {
+      height: "100%",
+      width: "100%"
+    },
+    posterHidden: {
+      opacity: 0.55
+    },
+    posterFallback: {
+      backgroundColor: colors.border
+    },
+    veil: {
+      ...StyleSheet.absoluteFillObject,
+      backgroundColor: "rgba(0,0,0,0.42)"
+    },
+    moreCard: {
+      alignItems: "center",
+      backgroundColor: colors.card,
+      borderColor: colors.border,
+      borderWidth: 1,
+      justifyContent: "center"
+    },
+    moreText: {
+      color: colors.muted,
+      fontWeight: "800"
+    }
+  });
+}

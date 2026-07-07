@@ -1,6 +1,6 @@
-import { colors } from "../theme";
+import type { ColorScheme } from "../theme/colorSchemes";
 
-export function trustColorForPercent(percent: number | null | undefined) {
+export function trustColorForPercent(percent: number | null | undefined, colors: ColorScheme) {
   if (percent == null) {
     return colors.muted;
   }

@@ -1,14 +1,14 @@
 import { Ionicons } from "@expo/vector-icons";
 import { useFocusEffect, useRouter } from "expo-router";
-import { useCallback, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { ActivityIndicator, Alert, Pressable, StyleSheet, Text, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { MovieSearchModal } from "../../src/components/MovieSearchModal";
 import { CreatePutMeOnRequestModal } from "../../src/components/putMeOn/CreatePutMeOnRequestModal";
 import { PutMeOnGauntletCard } from "../../src/components/putMeOn/PutMeOnGauntletCard";
 import { PutMeOnLeaderboard } from "../../src/components/putMeOn/PutMeOnLeaderboard";
-import { PutMeOnRequestCard } from "../../src/components/putMeOn/PutMeOnRequestCard";
-import { PutMeOnYourRequestsSection } from "../../src/components/putMeOn/PutMeOnYourRequestsSection";
+import { PutMeOnRequestsPanel } from "../../src/components/putMeOn/PutMeOnRequestsPanel";
+import { RecOfWeekLeaderboard } from "../../src/components/putMeOn/RecOfWeekLeaderboard";
 import { Screen } from "../../src/components/Screen";
 import { getPutMeOnFeed, type PutMeOnFeed, type PutMeOnSort } from "../../src/lib/putMeOnFeed";
 import { queuePutMeOnRequestNotifications } from "../../src/lib/putMeOnNotifications";
@@ -17,27 +17,50 @@ import {
   deletePutMeOnRequest,
   type CreatePutMeOnRequestInput
 } from "../../src/lib/putMeOnRequests";
+import { getRecOfWeekBoard, submitRecOfWeekPick, voteRecOfWeek, type RecOfWeekBoard } from "../../src/lib/recOfWeek";
 import { getFriendships, getOtherUser } from "../../src/lib/social";
 import { useAuth } from "../../src/providers/AuthProvider";
-import { colors, spacing } from "../../src/theme";
-import type { UserProfile } from "../../src/types";
-
-const SORT_LABELS: Record<PutMeOnSort, string> = {
-  newest: "Newest",
-  most_responses: "Most responses",
-  ending_soon: "Ending soon"
-};
+import { useTheme } from "../../src/providers/ThemeProvider";
+import type { ColorScheme } from "../../src/theme";
+import { spacing } from "../../src/theme";
+import type { TmdbSearchResult, UserProfile } from "../../src/types";
 
 export default function PutMeOnScreen() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
   const { user, profile } = useAuth();
+  const { colors } = useTheme();
+  const styles = useMemo(() => createStyles(colors), [colors]);
   const [feed, setFeed] = useState<PutMeOnFeed | null>(null);
+  const [recOfWeek, setRecOfWeek] = useState<RecOfWeekBoard | null>(null);
   const [friends, setFriends] = useState<UserProfile[]>([]);
   const [loading, setLoading] = useState(true);
+  const [recOfWeekLoading, setRecOfWeekLoading] = useState(true);
+  const [votingRecId, setVotingRecId] = useState(false);
   const [sortBy, setSortBy] = useState<PutMeOnSort>("newest");
   const [createOpen, setCreateOpen] = useState(false);
   const [searchOpen, setSearchOpen] = useState(false);
+  const [recOfWeekPostOpen, setRecOfWeekPostOpen] = useState(false);
+  const [submittingPick, setSubmittingPick] = useState(false);
+
+  const loadRecOfWeek = useCallback(
+    async (friendList: UserProfile[]) => {
+      if (!user) {
+        return;
+      }
+
+      setRecOfWeekLoading(true);
+      try {
+        setRecOfWeek(await getRecOfWeekBoard(user.id, friendList.map((friend) => friend.id)));
+      } catch (error) {
+        console.warn("Rec of week load failed:", (error as Error).message);
+        setRecOfWeek(null);
+      } finally {
+        setRecOfWeekLoading(false);
+      }
+    },
+    [user]
+  );
 
   const load = useCallback(async () => {
     if (!user) {
@@ -54,12 +77,17 @@ export default function PutMeOnScreen() {
 
       setFriends(nextFriends);
       setFeed(await getPutMeOnFeed(user.id, nextFriends));
+      await loadRecOfWeek(nextFriends);
     } catch (error) {
       Alert.alert("Could not load Put Me On", (error as Error).message);
     } finally {
       setLoading(false);
     }
-  }, [user]);
+  }, [loadRecOfWeek, user]);
+
+  useEffect(() => {
+    void load();
+  }, [load]);
 
   useFocusEffect(
     useCallback(() => {
@@ -107,6 +135,45 @@ export default function PutMeOnScreen() {
     }
   }
 
+  async function handleVoteRecOfWeek(submissionId: string) {
+    if (!user || !recOfWeek) {
+      return;
+    }
+
+    setVotingRecId(true);
+    try {
+      await voteRecOfWeek(user.id, submissionId, recOfWeek.weekStart);
+      await loadRecOfWeek(friends);
+    } catch (error) {
+      Alert.alert("Could not vote", (error as Error).message);
+    } finally {
+      setVotingRecId(false);
+    }
+  }
+
+  async function handleSubmitRecOfWeekPick(item: TmdbSearchResult) {
+    if (!user || !recOfWeek) {
+      return;
+    }
+
+    setSubmittingPick(true);
+    try {
+      await submitRecOfWeekPick({
+        userId: user.id,
+        friendIds: friends.map((friend) => friend.id),
+        tmdbId: item.id,
+        mediaType: item.media_type,
+        weekStart: recOfWeek.weekStart
+      });
+      setRecOfWeekPostOpen(false);
+      await loadRecOfWeek(friends);
+    } catch (error) {
+      Alert.alert("Could not post pick", (error as Error).message);
+    } finally {
+      setSubmittingPick(false);
+    }
+  }
+
   function confirmDeleteRequest(requestId: string) {
     Alert.alert("Delete request?", "Friends won't be able to put you on for this prompt anymore.", [
       { text: "Cancel", style: "cancel" },
@@ -149,23 +216,32 @@ export default function PutMeOnScreen() {
 
         {feed ? (
           <>
-            <PutMeOnYourRequestsSection
-              requests={feed.yourRequests}
+            {!feed.backendReady ? (
+              <View style={styles.setupBanner}>
+                <Text style={styles.setupTitle}>Friend requests need Supabase setup</Text>
+                <Text style={styles.setupBody}>
+                  Run supabase/put-me-on.sql in your Supabase SQL Editor, then have your friend post again.
+                </Text>
+              </View>
+            ) : null}
+
+            <PutMeOnRequestsPanel
+              yourRequests={feed.yourRequests}
+              openRequests={feed.openRequests}
+              sortBy={sortBy}
               onCreatePress={() => setCreateOpen(true)}
               onDeleteRequest={confirmDeleteRequest}
+              onPutThemOn={putThemOn}
+              onCycleSort={cycleSort}
             />
 
-            <View style={styles.sectionHeader}>
-              <Text style={styles.sectionLabel}>Open requests</Text>
-              <Pressable onPress={cycleSort} style={styles.sortButton}>
-                <Text style={styles.sortText}>{SORT_LABELS[sortBy]}</Text>
-                <Ionicons name="chevron-down" size={12} color={colors.muted} />
-              </Pressable>
-            </View>
-
-            {feed.openRequests.map((request) => (
-              <PutMeOnRequestCard key={request.id} request={request} onPutThemOn={putThemOn} />
-            ))}
+            <RecOfWeekLeaderboard
+              board={recOfWeek}
+              loading={recOfWeekLoading}
+              voting={votingRecId}
+              onVote={handleVoteRecOfWeek}
+              onPostPick={() => setRecOfWeekPostOpen(true)}
+            />
 
             <PutMeOnGauntletCard gauntlet={feed.gauntlet} onAnswer={() => showComingSoon("Genre Gauntlet")} />
 
@@ -183,74 +259,83 @@ export default function PutMeOnScreen() {
       />
 
       <MovieSearchModal visible={searchOpen} onClose={() => setSearchOpen(false)} />
+
+      <MovieSearchModal
+        visible={recOfWeekPostOpen}
+        onClose={() => setRecOfWeekPostOpen(false)}
+        subtitle="Post a movie you'd want your friends to see this week."
+        onSelect={(item) => {
+          if (submittingPick) {
+            return;
+          }
+          void handleSubmitRecOfWeekPick(item);
+        }}
+      />
     </>
   );
 }
 
-const styles = StyleSheet.create({
-  screenContent: {
-    gap: spacing.md,
-    paddingBottom: spacing.xl * 2,
-    paddingHorizontal: spacing.sm,
-    paddingTop: 0
-  },
-  topBar: {
-    alignItems: "center",
-    flexDirection: "row",
-    justifyContent: "space-between",
-    marginBottom: spacing.xs
-  },
-  topBarTitle: {
-    color: colors.text,
-    fontSize: 26,
-    fontWeight: "800",
-    letterSpacing: -0.4
-  },
-  topBarActions: {
-    alignItems: "center",
-    flexDirection: "row",
-    gap: spacing.sm
-  },
-  topBarIcon: {
-    alignItems: "center",
-    height: 32,
-    justifyContent: "center",
-    width: 32
-  },
-  noticeDot: {
-    backgroundColor: colors.accent,
-    borderRadius: 999,
-    height: 7,
-    position: "absolute",
-    right: 4,
-    top: 4,
-    width: 7
-  },
-  loading: {
-    alignItems: "center",
-    paddingVertical: spacing.xl
-  },
-  sectionHeader: {
-    alignItems: "center",
-    flexDirection: "row",
-    justifyContent: "space-between",
-    marginTop: spacing.xs
-  },
-  sectionLabel: {
-    color: colors.muted,
-    fontSize: 11,
-    fontWeight: "700",
-    letterSpacing: 0.8,
-    textTransform: "uppercase"
-  },
-  sortButton: {
-    alignItems: "center",
-    flexDirection: "row",
-    gap: 2
-  },
-  sortText: {
-    color: colors.muted,
-    fontSize: 11,
-    fontWeight: "700"
-  }
-});
+function createStyles(colors: ColorScheme) {
+  return StyleSheet.create({
+    screenContent: {
+      gap: spacing.md,
+      paddingBottom: spacing.xl * 2,
+      paddingHorizontal: spacing.sm,
+      paddingTop: 0
+    },
+    topBar: {
+      alignItems: "center",
+      flexDirection: "row",
+      justifyContent: "space-between",
+      marginBottom: spacing.xs
+    },
+    topBarTitle: {
+      color: colors.text,
+      fontSize: 26,
+      fontWeight: "800",
+      letterSpacing: -0.4
+    },
+    topBarActions: {
+      alignItems: "center",
+      flexDirection: "row",
+      gap: spacing.sm
+    },
+    topBarIcon: {
+      alignItems: "center",
+      height: 32,
+      justifyContent: "center",
+      width: 32
+    },
+    noticeDot: {
+      backgroundColor: colors.accent,
+      borderRadius: 999,
+      height: 7,
+      position: "absolute",
+      right: 4,
+      top: 4,
+      width: 7
+    },
+    loading: {
+      alignItems: "center",
+      paddingVertical: spacing.xl
+    },
+    setupBanner: {
+      backgroundColor: colors.card,
+      borderColor: colors.border,
+      borderRadius: 12,
+      borderWidth: 1,
+      gap: spacing.xs,
+      padding: spacing.md
+    },
+    setupTitle: {
+      color: colors.text,
+      fontSize: 14,
+      fontWeight: "700"
+    },
+    setupBody: {
+      color: colors.muted,
+      fontSize: 13,
+      lineHeight: 18
+    }
+  });
+}

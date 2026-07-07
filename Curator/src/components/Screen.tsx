@@ -67,7 +67,7 @@ export function Screen({
 
   return (
     <SafeAreaView edges={edges} style={styles.safe}>
-      <View style={styles.content}>
+      <View style={[styles.content, fill && styles.fillContent, contentContainerStyle]}>
         {title ? <Text style={styles.title}>{title}</Text> : null}
         {children}
       </View>

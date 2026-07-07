@@ -2,6 +2,7 @@ import { Stack } from "expo-router";
 import { StatusBar } from "expo-status-bar";
 import { SafeAreaProvider } from "react-native-safe-area-context";
 import { ConfigErrorScreen } from "../src/components/ConfigErrorScreen";
+import { SplashGate } from "../src/components/SplashGate";
 import { getBlockingEnvIssues } from "../src/lib/env";
 import { AuthProvider } from "../src/providers/AuthProvider";
 import { NotificationProvider } from "../src/providers/NotificationProvider";
@@ -27,6 +28,7 @@ function ThemedStack() {
       <Stack.Screen name="rated" options={{ title: "Rated" }} />
       <Stack.Screen name="responses" options={{ title: "Responses" }} />
       <Stack.Screen name="category/[slug]" options={{ title: "Browse" }} />
+      <Stack.Screen name="list/[id]" options={{ title: "List" }} />
     </Stack>
   );
 }
@@ -46,12 +48,14 @@ export default function RootLayout() {
   return (
     <SafeAreaProvider>
       <ThemeProvider>
-        <AuthProvider>
-          <NotificationProvider>
-            <StatusBar style="light" />
-            <ThemedStack />
-          </NotificationProvider>
-        </AuthProvider>
+        <SplashGate>
+          <AuthProvider>
+            <NotificationProvider>
+              <StatusBar style="light" />
+              <ThemedStack />
+            </NotificationProvider>
+          </AuthProvider>
+        </SplashGate>
       </ThemeProvider>
     </SafeAreaProvider>
   );

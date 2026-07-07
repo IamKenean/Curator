@@ -9,6 +9,7 @@ function ThemedTabs() {
   return (
     <Tabs
       screenOptions={{
+        lazy: false,
         headerStyle: { backgroundColor: colors.background },
         headerTintColor: colors.text,
         headerTitleStyle: { fontWeight: "800" },
@@ -21,7 +22,7 @@ function ThemedTabs() {
       }}
     >
       <Tabs.Screen name="index" options={{ headerShown: false, tabBarLabel: "Home" }} />
-      <Tabs.Screen name="friends" options={{ title: "Friends", tabBarLabel: "Friends" }} />
+      <Tabs.Screen name="friends" options={{ headerShown: false, tabBarLabel: "Friends" }} />
       <Tabs.Screen name="search" options={{ headerShown: false, tabBarLabel: "Put Me On" }} />
       <Tabs.Screen name="send" options={{ headerShown: false, tabBarLabel: "Send" }} />
       <Tabs.Screen name="profile" options={{ headerShown: false, tabBarLabel: "Profile" }} />

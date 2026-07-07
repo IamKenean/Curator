@@ -1,13 +1,14 @@
 import { useFocusEffect, useRouter } from "expo-router";
-import { useCallback, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { Alert, Dimensions, Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
+import { AddFriendModal } from "../../src/components/AddFriendModal";
+import { DropdownSelect } from "../../src/components/DropdownSelect";
 import { EmptyState } from "../../src/components/EmptyState";
 import { FriendActivityGridCell } from "../../src/components/FriendActivityGridCell";
 import { FriendCard } from "../../src/components/FriendCard";
 import { FriendProfileModal } from "../../src/components/FriendProfileModal";
 import { Screen } from "../../src/components/Screen";
-import { SortChip, SortChipRow } from "../../src/components/SortChip";
-import { TextField } from "../../src/components/TextField";
+import { TabTopBar, TabTopBarSpacer } from "../../src/components/TabTopBar";
 import { UserAvatar } from "../../src/components/UserAvatar";
 import {
   getFriendListInsights,
@@ -22,19 +23,18 @@ import { getTrustScores } from "../../src/lib/recommendations";
 import {
   acceptFriendRequest,
   declineFriendRequest,
-  getFriendshipState,
   getFriendships,
-  getOtherUser,
-  searchUsers,
-  sendFriendRequest
+  getOtherUser
 } from "../../src/lib/social";
 import { useAuth } from "../../src/providers/AuthProvider";
-import { colors, spacing } from "../../src/theme";
+import { useTheme } from "../../src/providers/ThemeProvider";
+import type { ColorScheme } from "../../src/theme";
+import { spacing } from "../../src/theme";
 import type { FriendActivityFeedItem, Friendship, UserProfile } from "../../src/types";
 
 const DEFAULT_SORT: FriendSortOption = "trust";
 const SCREEN_WIDTH = Dimensions.get("window").width;
-const H_PADDING = spacing.md;
+const H_PADDING = spacing.sm;
 const GRID_COLUMNS = 3;
 const GRID_GAP = spacing.sm;
 const GRID_CELL_WIDTH = (SCREEN_WIDTH - H_PADDING * 2 - GRID_GAP * (GRID_COLUMNS - 1)) / GRID_COLUMNS;
@@ -52,14 +52,14 @@ const SORT_OPTIONS: { id: FriendSortOption; label: string }[] = [
 export default function FriendsScreen() {
   const router = useRouter();
   const { user } = useAuth();
-  const [query, setQuery] = useState("");
-  const [results, setResults] = useState<UserProfile[]>([]);
+  const { colors } = useTheme();
+  const styles = useMemo(() => createStyles(colors), [colors]);
   const [friendships, setFriendships] = useState<Friendship[]>([]);
   const [friendItems, setFriendItems] = useState<FriendListItem[]>([]);
   const [friendActivity, setFriendActivity] = useState<FriendActivityFeedItem[]>([]);
-  const [loading, setLoading] = useState(false);
   const [sortBy, setSortBy] = useState<FriendSortOption>(DEFAULT_SORT);
   const [selectedProfile, setSelectedProfile] = useState<FriendProfileDetail | null>(null);
+  const [addFriendOpen, setAddFriendOpen] = useState(false);
 
   const incoming = useMemo(
     () => friendships.filter((friendship) => friendship.status === "pending" && friendship.friend_id === user?.id),
@@ -104,41 +104,15 @@ export default function FriendsScreen() {
     }
   }, [user]);
 
+  useEffect(() => {
+    void load();
+  }, [load]);
+
   useFocusEffect(
     useCallback(() => {
       void load();
     }, [load])
   );
-
-  async function runSearch(text: string) {
-    setQuery(text);
-    if (!user || text.trim().length < 2) {
-      setResults([]);
-      return;
-    }
-
-    setLoading(true);
-    try {
-      setResults(await searchUsers(text, user.id));
-    } catch (error) {
-      Alert.alert("Search failed", (error as Error).message);
-    } finally {
-      setLoading(false);
-    }
-  }
-
-  async function sendRequest(profile: UserProfile) {
-    if (!user) {
-      return;
-    }
-    try {
-      await sendFriendRequest(user.id, profile.id);
-      Alert.alert("Request sent", `Sent a friend request to ${profile.username}.`);
-      await load();
-    } catch (error) {
-      Alert.alert("Could not send request", (error as Error).message);
-    }
-  }
 
   async function respond(friendship: Friendship, accept: boolean) {
     try {
@@ -153,10 +127,6 @@ export default function FriendsScreen() {
     }
   }
 
-  function toggleSort(option: FriendSortOption) {
-    setSortBy((current) => (current === option ? DEFAULT_SORT : option));
-  }
-
   function openProfile(item: FriendListItem) {
     setSelectedProfile(toFriendProfileDetail(item));
   }
@@ -167,34 +137,11 @@ export default function FriendsScreen() {
   }
 
   return (
-    <Screen edges={["left", "right"]} contentContainerStyle={styles.screenContent}>
-      <View style={styles.section}>
-        <TextField placeholder="username" value={query} onChangeText={runSearch} autoCapitalize="none" />
-        {loading ? <Text style={styles.muted}>Searching...</Text> : null}
-        {results.map((profile) => {
-          const state = user ? getFriendshipState(friendships, user.id, profile.id) : "none";
-          const label =
-            state === "accepted" ? "Added" : state === "pending_out" ? "Pending" : state === "pending_in" ? "Requested" : null;
+    <>
+      <Screen fill edges={["left", "right"]} contentContainerStyle={styles.screenContent}>
+      <TabTopBar title="Friends" left={<TabTopBarSpacer />} right={<TabTopBarSpacer />} />
 
-          return (
-            <View key={profile.id} style={styles.row}>
-              <UserAvatar profile={profile} size={40} />
-              <View style={styles.rowBody}>
-                <Text style={styles.name}>@{profile.username}</Text>
-              </View>
-              {label ? (
-                <Text style={styles.added}>{label}</Text>
-              ) : (
-                <Pressable onPress={() => sendRequest(profile)}>
-                  <Text style={styles.action}>Add</Text>
-                </Pressable>
-              )}
-            </View>
-          );
-        })}
-      </View>
-
-      <View style={styles.section}>
+      <View style={styles.friendsPane}>
         {incoming.length > 0 ? (
           <View style={styles.requestBanner}>
             <Text style={styles.requestCount}>
@@ -203,21 +150,8 @@ export default function FriendsScreen() {
           </View>
         ) : null}
 
-        {acceptedFriends.length > 0 ? (
-          <SortChipRow>
-            {SORT_OPTIONS.map((option) => (
-              <SortChip
-                key={option.id}
-                label={option.label}
-                selected={sortBy === option.id}
-                onPress={() => toggleSort(option.id)}
-              />
-            ))}
-          </SortChipRow>
-        ) : null}
-
         {acceptedFriends.length === 0 && incoming.length === 0 ? (
-          <EmptyState title="No friends yet" body="Search by username to send your first request." />
+          <EmptyState title="No friends yet" body="Tap Add friend below to send your first request." />
         ) : null}
 
         {incoming.map((friendship) => {
@@ -243,19 +177,28 @@ export default function FriendsScreen() {
         })}
 
         {sortedFriendItems.length > 0 ? (
-          <View style={styles.friendListBox}>
-            <ScrollView
-              nestedScrollEnabled
-              showsVerticalScrollIndicator={false}
-              style={{ maxHeight: FRIEND_LIST_MAX_HEIGHT }}
-              contentContainerStyle={styles.friendListScroll}
-            >
-              {sortedFriendItems.map((item) => (
-                <FriendCard key={item.friend.id} item={item} onPress={() => openProfile(item)} />
-              ))}
-            </ScrollView>
+          <View style={styles.friendListSlot}>
+            <View style={styles.friendListHeader}>
+              <DropdownSelect value={sortBy} options={SORT_OPTIONS} onChange={setSortBy} />
+            </View>
+            <View style={styles.friendListBox}>
+              <ScrollView
+                nestedScrollEnabled
+                showsVerticalScrollIndicator={false}
+                style={{ maxHeight: FRIEND_LIST_MAX_HEIGHT }}
+                contentContainerStyle={styles.friendListScroll}
+              >
+                {sortedFriendItems.map((item) => (
+                  <FriendCard key={item.friend.id} item={item} onPress={() => openProfile(item)} />
+                ))}
+              </ScrollView>
+            </View>
           </View>
         ) : null}
+
+        <Pressable hitSlop={8} onPress={() => setAddFriendOpen(true)} style={styles.addFriendLink}>
+          <Text style={styles.addFriendText}>Add friend</Text>
+        </Pressable>
       </View>
 
       <View style={styles.feedSection}>
@@ -277,6 +220,17 @@ export default function FriendsScreen() {
           </View>
         )}
       </View>
+      </Screen>
+
+      {user ? (
+        <AddFriendModal
+          visible={addFriendOpen}
+          userId={user.id}
+          friendships={friendships}
+          onClose={() => setAddFriendOpen(false)}
+          onUpdated={load}
+        />
+      ) : null}
 
       <FriendProfileModal
         visible={selectedProfile != null}
@@ -284,126 +238,135 @@ export default function FriendsScreen() {
         onClose={() => setSelectedProfile(null)}
         onPutMeOn={putMeOn}
       />
-    </Screen>
+    </>
   );
 }
 
-const styles = StyleSheet.create({
-  screenContent: {
-    gap: spacing.md,
-    paddingBottom: spacing.lg,
-    paddingHorizontal: H_PADDING,
-    paddingTop: spacing.xs
-  },
-  section: {
-    gap: spacing.sm
-  },
-  requestBanner: {
-    alignItems: "flex-end"
-  },
-  requestCount: {
-    color: colors.star,
-    fontSize: 12,
-    fontWeight: "700"
-  },
-  friendListBox: {
-    backgroundColor: colors.card,
-    borderColor: colors.border,
-    borderRadius: 16,
-    borderWidth: 1,
-    overflow: "hidden",
-    padding: spacing.sm
-  },
-  friendListScroll: {
-    gap: spacing.sm
-  },
-  row: {
-    alignItems: "center",
-    backgroundColor: colors.card,
-    borderColor: colors.border,
-    borderRadius: 14,
-    borderWidth: 1,
-    flexDirection: "row",
-    gap: spacing.md,
-    paddingHorizontal: spacing.md,
-    paddingVertical: spacing.sm + 2
-  },
-  rowBody: {
-    flex: 1,
-    gap: 2,
-    minWidth: 0
-  },
-  name: {
-    color: colors.text,
-    fontSize: 16,
-    fontWeight: "800"
-  },
-  action: {
-    color: colors.accent,
-    fontSize: 14,
-    fontWeight: "800"
-  },
-  added: {
-    color: colors.muted,
-    fontSize: 13,
-    fontWeight: "700"
-  },
-  muted: {
-    color: colors.muted,
-    fontSize: 14
-  },
-  requestBadge: {
-    color: colors.star,
-    fontSize: 11,
-    fontWeight: "800",
-    letterSpacing: 0.3,
-    textTransform: "uppercase"
-  },
-  requestActions: {
-    alignItems: "center",
-    flexDirection: "row",
-    gap: spacing.xs
-  },
-  requestActionAccept: {
-    color: colors.text,
-    fontSize: 12,
-    fontWeight: "700"
-  },
-  requestActionDecline: {
-    color: colors.muted,
-    fontSize: 12,
-    fontWeight: "700"
-  },
-  requestDot: {
-    color: colors.muted,
-    fontSize: 12
-  },
-  feedSection: {
-    gap: spacing.sm,
-    paddingTop: spacing.xs
-  },
-  feedTitle: {
-    color: colors.text,
-    fontSize: 18,
-    fontWeight: "800"
-  },
-  feedSubtitle: {
-    color: colors.muted,
-    fontSize: 13,
-    lineHeight: 18
-  },
-  feedEmpty: {
-    color: colors.muted,
-    fontSize: 13
-  },
-  grid: {
-    flexDirection: "row",
-    flexWrap: "wrap"
-  },
-  gridCell: {
-    marginBottom: GRID_GAP + spacing.sm
-  },
-  gridCellGutter: {
-    marginRight: GRID_GAP
-  }
-});
+function createStyles(colors: ColorScheme) {
+  return StyleSheet.create({
+    screenContent: {
+      flexGrow: 1,
+      gap: spacing.sm,
+      paddingBottom: spacing.lg,
+      paddingHorizontal: spacing.sm,
+      paddingTop: 0
+    },
+    friendsPane: {
+      gap: spacing.sm
+    },
+    friendListSlot: {
+      gap: spacing.xs,
+      marginTop: spacing.sm
+    },
+    friendListHeader: {
+      alignItems: "center",
+      flexDirection: "row",
+      justifyContent: "flex-end"
+    },
+    requestBanner: {
+      alignItems: "flex-end"
+    },
+    requestCount: {
+      color: colors.star,
+      fontSize: 12,
+      fontWeight: "700"
+    },
+    friendListBox: {
+      backgroundColor: colors.card,
+      borderColor: colors.border,
+      borderRadius: 16,
+      borderWidth: 1,
+      overflow: "hidden",
+      padding: spacing.sm
+    },
+    friendListScroll: {
+      gap: spacing.sm
+    },
+    addFriendLink: {
+      alignSelf: "flex-start",
+      marginTop: spacing.xs
+    },
+    addFriendText: {
+      color: colors.accent,
+      fontSize: 13,
+      fontWeight: "800"
+    },
+    row: {
+      alignItems: "center",
+      backgroundColor: colors.card,
+      borderColor: colors.border,
+      borderRadius: 14,
+      borderWidth: 1,
+      flexDirection: "row",
+      gap: spacing.md,
+      paddingHorizontal: spacing.md,
+      paddingVertical: spacing.sm + 2
+    },
+    rowBody: {
+      flex: 1,
+      gap: 2,
+      minWidth: 0
+    },
+    name: {
+      color: colors.text,
+      fontSize: 16,
+      fontWeight: "800"
+    },
+    requestBadge: {
+      color: colors.star,
+      fontSize: 11,
+      fontWeight: "800",
+      letterSpacing: 0.3,
+      textTransform: "uppercase"
+    },
+    requestActions: {
+      alignItems: "center",
+      flexDirection: "row",
+      gap: spacing.xs
+    },
+    requestActionAccept: {
+      color: colors.text,
+      fontSize: 12,
+      fontWeight: "700"
+    },
+    requestActionDecline: {
+      color: colors.muted,
+      fontSize: 12,
+      fontWeight: "700"
+    },
+    requestDot: {
+      color: colors.muted,
+      fontSize: 12
+    },
+    feedSection: {
+      gap: spacing.sm,
+      paddingTop: spacing.xs
+    },
+    feedTitle: {
+      color: colors.muted,
+      fontSize: 11,
+      fontWeight: "700",
+      letterSpacing: 0.8,
+      textTransform: "uppercase"
+    },
+    feedSubtitle: {
+      color: colors.muted,
+      fontSize: 13,
+      lineHeight: 18
+    },
+    feedEmpty: {
+      color: colors.muted,
+      fontSize: 13
+    },
+    grid: {
+      flexDirection: "row",
+      flexWrap: "wrap"
+    },
+    gridCell: {
+      marginBottom: GRID_GAP + spacing.sm
+    },
+    gridCellGutter: {
+      marginRight: GRID_GAP
+    }
+  });
+}

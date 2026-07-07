@@ -1,9 +1,11 @@
 import { Ionicons } from "@expo/vector-icons";
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { Pressable, StyleSheet, Text, View } from "react-native";
 import type { LeaderboardEntry } from "../../lib/putMeOnFeed";
 import { trustColorForPercent } from "../../lib/trustColors";
-import { colors, spacing } from "../../theme";
+import { useTheme } from "../../providers/ThemeProvider";
+import type { ColorScheme } from "../../theme";
+import { spacing } from "../../theme";
 import { UserAvatar } from "../UserAvatar";
 
 type LeaderboardTab = "trust" | "gatekeep" | "consistency";
@@ -20,6 +22,8 @@ type PutMeOnLeaderboardProps = {
 };
 
 export function PutMeOnLeaderboard({ entries, onViewAll }: PutMeOnLeaderboardProps) {
+  const { colors } = useTheme();
+  const styles = useMemo(() => createStyles(colors), [colors]);
   const [activeTab, setActiveTab] = useState<LeaderboardTab>("trust");
 
   return (
@@ -60,7 +64,7 @@ export function PutMeOnLeaderboard({ entries, onViewAll }: PutMeOnLeaderboardPro
               <Text style={styles.badge}>{entry.badge}</Text>
             </View>
             <View style={styles.stats}>
-              <Text style={[styles.trust, { color: trustColorForPercent(entry.trustPercent) }]}>
+              <Text style={[styles.trust, { color: trustColorForPercent(entry.trustPercent, colors) }]}>
                 {entry.trustPercent}%
               </Text>
               <Text style={styles.gatekeep}>
@@ -75,99 +79,101 @@ export function PutMeOnLeaderboard({ entries, onViewAll }: PutMeOnLeaderboardPro
   );
 }
 
-const styles = StyleSheet.create({
-  section: {
-    gap: spacing.sm
-  },
-  header: {
-    alignItems: "center",
-    flexDirection: "row",
-    justifyContent: "space-between"
-  },
-  sectionLabel: {
-    color: colors.muted,
-    fontSize: 11,
-    fontWeight: "700",
-    letterSpacing: 0.8,
-    textTransform: "uppercase"
-  },
-  viewAll: {
-    color: colors.muted,
-    fontSize: 11,
-    fontWeight: "700"
-  },
-  tabs: {
-    flexDirection: "row",
-    flexWrap: "wrap",
-    gap: spacing.xs
-  },
-  tab: {
-    backgroundColor: colors.card,
-    borderColor: colors.border,
-    borderRadius: 999,
-    borderWidth: 1,
-    paddingHorizontal: spacing.sm + 2,
-    paddingVertical: spacing.xs + 2
-  },
-  tabSelected: {
-    backgroundColor: colors.accent,
-    borderColor: colors.accent
-  },
-  tabText: {
-    color: colors.muted,
-    fontSize: 11,
-    fontWeight: "700"
-  },
-  tabTextSelected: {
-    color: colors.text
-  },
-  list: {
-    backgroundColor: colors.card,
-    borderColor: colors.border,
-    borderRadius: 14,
-    borderWidth: 1,
-    gap: spacing.xs,
-    padding: spacing.sm
-  },
-  row: {
-    alignItems: "center",
-    flexDirection: "row",
-    gap: spacing.sm,
-    paddingHorizontal: spacing.xs,
-    paddingVertical: spacing.sm
-  },
-  rank: {
-    color: colors.muted,
-    fontSize: 14,
-    fontWeight: "800",
-    width: 16
-  },
-  copy: {
-    flex: 1,
-    gap: 1,
-    minWidth: 0
-  },
-  name: {
-    color: colors.text,
-    fontSize: 14,
-    fontWeight: "800"
-  },
-  badge: {
-    color: colors.accent,
-    fontSize: 10,
-    fontWeight: "700"
-  },
-  stats: {
-    alignItems: "flex-end",
-    gap: 1
-  },
-  trust: {
-    fontSize: 13,
-    fontWeight: "900"
-  },
-  gatekeep: {
-    color: colors.muted,
-    fontSize: 10,
-    fontWeight: "700"
-  }
-});
+function createStyles(colors: ColorScheme) {
+  return StyleSheet.create({
+    section: {
+      gap: spacing.sm
+    },
+    header: {
+      alignItems: "center",
+      flexDirection: "row",
+      justifyContent: "space-between"
+    },
+    sectionLabel: {
+      color: colors.muted,
+      fontSize: 11,
+      fontWeight: "700",
+      letterSpacing: 0.8,
+      textTransform: "uppercase"
+    },
+    viewAll: {
+      color: colors.muted,
+      fontSize: 11,
+      fontWeight: "700"
+    },
+    tabs: {
+      flexDirection: "row",
+      flexWrap: "wrap",
+      gap: spacing.xs
+    },
+    tab: {
+      backgroundColor: colors.card,
+      borderColor: colors.border,
+      borderRadius: 999,
+      borderWidth: 1,
+      paddingHorizontal: spacing.sm + 2,
+      paddingVertical: spacing.xs + 2
+    },
+    tabSelected: {
+      backgroundColor: colors.accent,
+      borderColor: colors.accent
+    },
+    tabText: {
+      color: colors.muted,
+      fontSize: 11,
+      fontWeight: "700"
+    },
+    tabTextSelected: {
+      color: colors.text
+    },
+    list: {
+      backgroundColor: colors.card,
+      borderColor: colors.border,
+      borderRadius: 14,
+      borderWidth: 1,
+      gap: spacing.xs,
+      padding: spacing.sm
+    },
+    row: {
+      alignItems: "center",
+      flexDirection: "row",
+      gap: spacing.sm,
+      paddingHorizontal: spacing.xs,
+      paddingVertical: spacing.sm
+    },
+    rank: {
+      color: colors.muted,
+      fontSize: 14,
+      fontWeight: "800",
+      width: 16
+    },
+    copy: {
+      flex: 1,
+      gap: 1,
+      minWidth: 0
+    },
+    name: {
+      color: colors.text,
+      fontSize: 14,
+      fontWeight: "800"
+    },
+    badge: {
+      color: colors.accent,
+      fontSize: 10,
+      fontWeight: "700"
+    },
+    stats: {
+      alignItems: "flex-end",
+      gap: 1
+    },
+    trust: {
+      fontSize: 13,
+      fontWeight: "900"
+    },
+    gatekeep: {
+      color: colors.muted,
+      fontSize: 10,
+      fontWeight: "700"
+    }
+  });
+}

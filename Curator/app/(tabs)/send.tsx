@@ -1,35 +1,33 @@
-import { Ionicons } from "@expo/vector-icons";
 import { useFocusEffect, useLocalSearchParams } from "expo-router";
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { Alert, Image, LayoutChangeEvent, Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
-import { useSafeAreaInsets } from "react-native-safe-area-context";
+import { ActivityIndicator, Alert, Image, LayoutChangeEvent, Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
 import { Button } from "../../src/components/Button";
 import { EmptyState } from "../../src/components/EmptyState";
 import { FriendPicker } from "../../src/components/FriendPicker";
 import { Screen } from "../../src/components/Screen";
 import { SendSectionCard } from "../../src/components/SendSectionCard";
 import { StarRatingPicker } from "../../src/components/StarRatingPicker";
+import { TabTopBar, TabTopBarSide, TabTopBarSpacer } from "../../src/components/TabTopBar";
 import { TmdbSearch } from "../../src/components/TmdbSearch";
 import { getSentRecommendations, sendRecommendation } from "../../src/lib/recommendations";
 import { addPutMeOnResponse, findPutMeOnRequest } from "../../src/lib/putMeOnRequests";
 import { getFriendships, getOtherUser } from "../../src/lib/social";
+import { getTmdbTitle } from "../../src/lib/tmdb";
+import { hexToRgb } from "../../src/lib/colorUtils";
 import { useAuth } from "../../src/providers/AuthProvider";
-import { colors, posterBaseUrl, spacing } from "../../src/theme";
+import { useTheme } from "../../src/providers/ThemeProvider";
+import type { ColorScheme } from "../../src/theme/colorSchemes";
+import { posterBaseUrl, spacing } from "../../src/theme";
 import type { Friendship, TmdbSearchResult, UserProfile } from "../../src/types";
 
-const ESTIMATE_STAR_EMPTY = "rgba(229, 9, 20, 0.55)";
-const RECENT_PUT_ONS_LIMIT = 16;
-const RECENT_COLUMNS = 4;
-const RECENT_POSTER_ASPECT = 1.45;
+const RECENT_PUT_ONS_LIMIT = 4;
+const RECENT_POSTER_ASPECT = 1.35;
 const RECENT_ROW_GAP = spacing.sm;
 const RECENT_INSET = 0;
 
-function chunkTitles<T>(items: T[], size: number): T[][] {
-  const rows: T[][] = [];
-  for (let index = 0; index < items.length; index += size) {
-    rows.push(items.slice(index, index + size));
-  }
-  return rows;
+function hexToRgba(hex: string, alpha: number): string {
+  const { r, g, b } = hexToRgb(hex);
+  return `rgba(${r}, ${g}, ${b}, ${alpha})`;
 }
 
 function dedupeRecentTitles(items: Awaited<ReturnType<typeof getSentRecommendations>>): TmdbSearchResult[] {
@@ -59,11 +57,13 @@ function dedupeRecentTitles(items: Awaited<ReturnType<typeof getSentRecommendati
 function RecentPutOnsPicker({
   titles,
   selected,
-  onSelect
+  onSelect,
+  styles
 }: {
   titles: TmdbSearchResult[];
   selected: TmdbSearchResult | null;
   onSelect: (item: TmdbSearchResult | null) => void;
+  styles: ReturnType<typeof createSendStyles>;
 }) {
   const [containerWidth, setContainerWidth] = useState(0);
 
@@ -73,15 +73,6 @@ function RecentPutOnsPicker({
 
   const rowWidth = containerWidth > 0 ? containerWidth - RECENT_INSET * 2 : 0;
 
-  const scrollMaxHeight = useMemo(() => {
-    if (rowWidth <= 0) {
-      return 120;
-    }
-
-    const posterWidth = (rowWidth - RECENT_ROW_GAP * (RECENT_COLUMNS - 1)) / RECENT_COLUMNS;
-    return posterWidth * RECENT_POSTER_ASPECT + RECENT_ROW_GAP;
-  }, [rowWidth]);
-
   if (titles.length === 0) {
     return null;
   }
@@ -90,38 +81,62 @@ function RecentPutOnsPicker({
     <View style={styles.recentSection} onLayout={handleLayout}>
       <Text style={styles.recentLabel}>Recent put ons</Text>
       {rowWidth > 0 ? (
+        <View style={[styles.recentRow, { width: rowWidth }]}>
+          {titles.map((item) => {
+            const isSelected = selected?.id === item.id && selected.media_type === item.media_type;
+            const posterUri = item.poster_path ? `${posterBaseUrl}${item.poster_path}` : undefined;
+
+            return (
+              <Pressable
+                key={`${item.media_type}-${item.id}`}
+                onPress={() => onSelect(isSelected ? null : item)}
+                style={[styles.recentPosterWrap, isSelected && styles.recentPosterSelected]}
+              >
+                {posterUri ? (
+                  <Image source={{ uri: posterUri }} style={styles.recentPoster} />
+                ) : (
+                  <View style={[styles.recentPoster, styles.recentPosterFallback]}>
+                    <Text style={styles.recentPosterFallbackText}>No Poster</Text>
+                  </View>
+                )}
+              </Pressable>
+            );
+          })}
+        </View>
+      ) : null}
+    </View>
+  );
+}
+
+function TitleOverview({
+  title,
+  loading,
+  styles
+}: {
+  title: TmdbSearchResult;
+  loading: boolean;
+  styles: ReturnType<typeof createSendStyles>;
+}) {
+  const { colors } = useTheme();
+  const summary = title.overview?.trim();
+
+  return (
+    <View style={styles.summarySection}>
+      <Text style={styles.summaryLabel}>Summary</Text>
+      {loading ? (
+        <View style={styles.summaryLoading}>
+          <ActivityIndicator color={colors.accent} size="small" />
+        </View>
+      ) : (
         <ScrollView
           nestedScrollEnabled
           showsVerticalScrollIndicator={false}
-          style={[styles.recentScroll, { maxHeight: scrollMaxHeight }]}
-          contentContainerStyle={styles.recentScrollContent}
+          style={styles.summaryScroll}
+          contentContainerStyle={styles.summaryContent}
         >
-          {chunkTitles(titles, RECENT_COLUMNS).map((row, rowIndex) => (
-            <View key={`row-${rowIndex}`} style={[styles.recentRow, { width: rowWidth }]}>
-              {row.map((item) => {
-                const isSelected = selected?.id === item.id && selected.media_type === item.media_type;
-                const posterUri = item.poster_path ? `${posterBaseUrl}${item.poster_path}` : undefined;
-
-                return (
-                  <Pressable
-                    key={`${item.media_type}-${item.id}`}
-                    onPress={() => onSelect(isSelected ? null : item)}
-                    style={[styles.recentPosterWrap, isSelected && styles.recentPosterSelected]}
-                  >
-                    {posterUri ? (
-                      <Image source={{ uri: posterUri }} style={styles.recentPoster} />
-                    ) : (
-                      <View style={[styles.recentPoster, styles.recentPosterFallback]}>
-                        <Text style={styles.recentPosterFallbackText}>No Poster</Text>
-                      </View>
-                    )}
-                  </Pressable>
-                );
-              })}
-            </View>
-          ))}
+          <Text style={styles.summaryText}>{summary || "No summary available for this title."}</Text>
         </ScrollView>
-      ) : null}
+      )}
     </View>
   );
 }
@@ -132,17 +147,20 @@ export default function SendScreen() {
     requestId?: string;
     requestOwnerId?: string;
   }>();
-  const insets = useSafeAreaInsets();
   const { user } = useAuth();
+  const { colors } = useTheme();
+  const styles = useMemo(() => createSendStyles(colors), [colors]);
+  const estimateStarEmpty = useMemo(() => hexToRgba(colors.star, 0.55), [colors.star]);
   const [friendships, setFriendships] = useState<Friendship[]>([]);
   const [selectedFriend, setSelectedFriend] = useState<UserProfile | null>(null);
   const [selectedTitle, setSelectedTitle] = useState<TmdbSearchResult | null>(null);
   const [estimatedRating, setEstimatedRating] = useState(0);
   const [senderRating, setSenderRating] = useState(0);
-  const [scrollEnabled, setScrollEnabled] = useState(true);
   const [sending, setSending] = useState(false);
   const [recentTitles, setRecentTitles] = useState<TmdbSearchResult[]>([]);
   const [requestPrompt, setRequestPrompt] = useState<string | null>(null);
+  const [titleLoading, setTitleLoading] = useState(false);
+  const [titleSearching, setTitleSearching] = useState(false);
 
   const friends = useMemo(() => {
     if (!user) {
@@ -221,12 +239,36 @@ export default function SendScreen() {
     });
   }, [requestId, requestOwnerId]);
 
+  useEffect(() => {
+    void loadFriends();
+    void loadRecentPutOns();
+  }, [loadFriends, loadRecentPutOns]);
+
   useFocusEffect(
     useCallback(() => {
       void loadFriends();
       void loadRecentPutOns();
     }, [loadFriends, loadRecentPutOns])
   );
+
+  const handleSelectTitle = useCallback(async (item: TmdbSearchResult | null) => {
+    if (!item) {
+      setSelectedTitle(null);
+      setTitleLoading(false);
+      return;
+    }
+
+    setTitleSearching(false);
+    setSelectedTitle(item);
+    setTitleLoading(true);
+    try {
+      setSelectedTitle(await getTmdbTitle(item.id, item.media_type));
+    } catch {
+      // Keep the basic selection if TMDB detail fails.
+    } finally {
+      setTitleLoading(false);
+    }
+  }, []);
 
   async function submit() {
     if (!user) {
@@ -287,19 +329,15 @@ export default function SendScreen() {
   return (
     <Screen
       fill
-      scrollEnabled={scrollEnabled}
+      scroll={false}
       edges={["left", "right"]}
       contentContainerStyle={styles.screenContent}
     >
-      <View style={[styles.topBar, { paddingTop: insets.top + spacing.xs }]}>
-        <View style={styles.topBarSide} />
-        <Text style={styles.topBarTitle} numberOfLines={1}>
-          Send
-        </Text>
-        <Pressable hitSlop={8} onPress={() => showComingSoon("Menu")} style={styles.topBarSide}>
-          <Ionicons name="ellipsis-horizontal" size={22} color={colors.text} />
-        </Pressable>
-      </View>
+      <TabTopBar
+        title="Send"
+        left={<TabTopBarSpacer />}
+        right={<TabTopBarSide icon="ellipsis-horizontal" onPress={() => showComingSoon("Menu")} />}
+      />
 
       {requestPrompt ? (
         <View style={styles.requestBanner}>
@@ -309,7 +347,7 @@ export default function SendScreen() {
       ) : null}
 
       <View style={styles.sections}>
-      <SendSectionCard title="1. Pick a friend">
+      <SendSectionCard title="1. Pick a friend" expand flex={1}>
         {friends.length === 0 ? (
           <EmptyState title="No friends yet" body="Accept or add a friend before sending recommendations." />
         ) : (
@@ -318,47 +356,60 @@ export default function SendScreen() {
             selected={selectedFriend}
             onSelect={setSelectedFriend}
             variant="send"
+            fill
           />
         )}
       </SendSectionCard>
 
-      <SendSectionCard title="2. Pick a title">
-        <TmdbSearch selected={selectedTitle} onSelect={setSelectedTitle} resultsMaxHeight={176} variant="send" />
-        {!selectedTitle ? (
-          <RecentPutOnsPicker titles={recentTitles} selected={selectedTitle} onSelect={setSelectedTitle} />
-        ) : null}
+      <SendSectionCard title="2. Pick a title" expand flex={1.35}>
+        <View style={styles.titleSectionBody}>
+          <TmdbSearch
+            selected={selectedTitle}
+            onSelect={handleSelectTitle}
+            onSearchingChange={setTitleSearching}
+            variant="send"
+            fill={titleSearching}
+          />
+          {selectedTitle ? (
+            <TitleOverview title={selectedTitle} loading={titleLoading} styles={styles} />
+          ) : !titleSearching ? (
+            <RecentPutOnsPicker
+              titles={recentTitles}
+              selected={selectedTitle}
+              onSelect={handleSelectTitle}
+              styles={styles}
+            />
+          ) : null}
+        </View>
       </SendSectionCard>
 
-      <SendSectionCard
-        title="3. Your estimate (optional)"
-        helper="How much you think they'll enjoy it. Used for trust score."
-      >
-        <StarRatingPicker
-          value={estimatedRating}
-          onChange={setEstimatedRating}
-          showFavorite={false}
-          showClear={false}
-          sendStyle
-          emptyLabel="Not sure"
-          starEmptyColor={ESTIMATE_STAR_EMPTY}
-          onInteractionChange={(active) => setScrollEnabled(!active)}
-        />
-      </SendSectionCard>
-
-      <SendSectionCard
-        title="4. What do you rate it? (optional)"
-        helper="Your personal take on the title. Doesn't affect trust score."
-      >
-        <StarRatingPicker
-          value={senderRating}
-          onChange={setSenderRating}
-          showFavorite={false}
-          showClear={false}
-          sendStyle
-          emptyLabel="Not rated yet"
-          starEmptyColor={colors.muted}
-          onInteractionChange={(active) => setScrollEnabled(!active)}
-        />
+      <SendSectionCard expand flex={1}>
+        <View style={styles.ratingsBody}>
+          <View style={styles.ratingBlockExpand}>
+            <Text style={styles.ratingLabel}>Your estimate for them</Text>
+            <StarRatingPicker
+              value={estimatedRating}
+              onChange={setEstimatedRating}
+              showFavorite={false}
+              showClear={false}
+              sendStyle
+              emptyLabel="Not sure"
+              starEmptyColor={estimateStarEmpty}
+            />
+          </View>
+          <View style={styles.ratingBlockExpand}>
+            <Text style={styles.ratingLabel}>Your personal rating</Text>
+            <StarRatingPicker
+              value={senderRating}
+              onChange={setSenderRating}
+              showFavorite={false}
+              showClear={false}
+              sendStyle
+              emptyLabel="Not rated yet"
+              starEmptyColor={colors.muted}
+            />
+          </View>
+        </View>
       </SendSectionCard>
       </View>
 
@@ -376,44 +427,52 @@ export default function SendScreen() {
   );
 }
 
-const styles = StyleSheet.create({
+function createSendStyles(colors: ColorScheme) {
+  return StyleSheet.create({
   screenContent: {
+    flex: 1,
     gap: spacing.sm,
-    paddingBottom: 0,
+    paddingBottom: spacing.md,
     paddingHorizontal: spacing.sm,
     paddingTop: 0
   },
-  topBar: {
-    alignItems: "center",
-    flexDirection: "row",
-    justifyContent: "space-between",
-    marginBottom: spacing.xs
-  },
-  topBarSide: {
-    alignItems: "center",
-    height: 32,
-    justifyContent: "center",
-    width: 32
-  },
-  topBarTitle: {
-    color: colors.text,
-    flex: 1,
-    fontSize: 18,
-    fontWeight: "800",
-    textAlign: "center"
-  },
   sections: {
-    flexGrow: 1,
-    gap: spacing.sm
+    flex: 1,
+    gap: spacing.sm,
+    minHeight: 0
+  },
+  titleSectionBody: {
+    flex: 1,
+    gap: spacing.xs,
+    justifyContent: "flex-start",
+    minHeight: 0
+  },
+  ratingsBody: {
+    flex: 1,
+    justifyContent: "space-evenly",
+    minHeight: 0
+  },
+  ratingBlockExpand: {
+    flex: 1,
+    gap: spacing.sm,
+    justifyContent: "center",
+    minHeight: 0
+  },
+  ratingLabel: {
+    color: colors.muted,
+    fontSize: 10,
+    fontWeight: "700",
+    letterSpacing: 0.4,
+    textTransform: "uppercase"
   },
   requestBanner: {
     backgroundColor: colors.card,
     borderColor: colors.accent,
-    borderRadius: 12,
+    borderRadius: 10,
     borderWidth: 1,
-    gap: spacing.xs,
-    paddingHorizontal: spacing.md,
-    paddingVertical: spacing.sm + 2
+    gap: 2,
+    paddingHorizontal: spacing.sm + 2,
+    paddingVertical: spacing.xs + 2
   },
   requestBannerLabel: {
     color: colors.muted,
@@ -434,24 +493,20 @@ const styles = StyleSheet.create({
     paddingTop: spacing.sm
   },
   sendButton: {
-    borderRadius: 12,
-    minHeight: 44,
+    borderRadius: 10,
+    minHeight: 40,
     width: "100%"
   },
   recentSection: {
     gap: spacing.xs,
-    marginTop: spacing.xs
+    marginTop: spacing.md
   },
   recentLabel: {
     color: colors.muted,
-    fontSize: 11,
+    fontSize: 10,
     fontWeight: "700",
     letterSpacing: 0.6,
     textTransform: "uppercase"
-  },
-  recentScroll: {},
-  recentScrollContent: {
-    gap: RECENT_ROW_GAP
   },
   recentRow: {
     flexDirection: "row",
@@ -482,5 +537,38 @@ const styles = StyleSheet.create({
     color: colors.muted,
     fontSize: 9,
     textAlign: "center"
+  },
+  summarySection: {
+    flex: 1,
+    gap: spacing.xs,
+    marginTop: spacing.md,
+    minHeight: 0
+  },
+  summaryLabel: {
+    color: colors.muted,
+    fontSize: 10,
+    fontWeight: "700",
+    letterSpacing: 0.6,
+    textTransform: "uppercase"
+  },
+  summaryLoading: {
+    alignItems: "flex-start",
+    flex: 1,
+    justifyContent: "center",
+    minHeight: 0,
+    paddingVertical: spacing.sm
+  },
+  summaryScroll: {
+    flex: 1,
+    minHeight: 0
+  },
+  summaryContent: {
+    paddingBottom: spacing.xs
+  },
+  summaryText: {
+    color: colors.text,
+    fontSize: 13,
+    lineHeight: 19
   }
-});
+  });
+}

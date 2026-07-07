@@ -9,14 +9,18 @@ import { SortChip, SortChipRow } from "../src/components/SortChip";
 import { formatComparison, formatStarRating } from "../src/lib/ratings";
 import { getSentRecommendations } from "../src/lib/recommendations";
 import { useAuth } from "../src/providers/AuthProvider";
-import { colors, spacing } from "../src/theme";
+import { useTheme } from "../src/providers/ThemeProvider";
+import type { ColorScheme } from "../src/theme";
+import { spacing } from "../src/theme";
 import type { RatedRecommendation, UserProfile } from "../src/types";
 
 const PREVIEW_LIMIT = 3;
 
 type SortOption = "newest" | "oldest" | "rating_high" | "rating_low";
 
-function SentRecommendationCard({ item }: { item: RatedRecommendation }) {
+type SentStyles = ReturnType<typeof createStyles>;
+
+function SentRecommendationCard({ item, styles }: { item: RatedRecommendation; styles: SentStyles }) {
   const isWatched = item.status === "watched";
   const actual = item.rating?.rating_value ?? 0;
   const comparison = isWatched ? formatComparison(item.estimated_rating, actual) : null;
@@ -54,6 +58,8 @@ const DEFAULT_SORT: SortOption = "newest";
 
 export default function SentScreen() {
   const { user } = useAuth();
+  const { colors } = useTheme();
+  const styles = useMemo(() => createStyles(colors), [colors]);
   const [items, setItems] = useState<RatedRecommendation[]>([]);
   const [loading, setLoading] = useState(false);
   const [showAll, setShowAll] = useState(false);
@@ -167,7 +173,7 @@ export default function SentScreen() {
       ) : null}
 
       {visibleItems.map((item) => (
-        <SentRecommendationCard key={item.id} item={item} />
+        <SentRecommendationCard key={item.id} item={item} styles={styles} />
       ))}
 
       {!loading && hasHiddenItems && !showAll ? (
@@ -181,7 +187,8 @@ export default function SentScreen() {
   );
 }
 
-const styles = StyleSheet.create({
+function createStyles(colors: ColorScheme) {
+  return StyleSheet.create({
   filters: {
     gap: spacing.sm
   },
@@ -257,4 +264,5 @@ const styles = StyleSheet.create({
   muted: {
     color: colors.muted
   }
-});
+  });
+}

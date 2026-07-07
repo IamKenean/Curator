@@ -1,11 +1,15 @@
 import { Redirect } from "expo-router";
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { ActivityIndicator, StyleSheet, Text, View } from "react-native";
 import { useAuth } from "../src/providers/AuthProvider";
-import { colors, spacing } from "../src/theme";
+import { useTheme } from "../src/providers/ThemeProvider";
+import type { ColorScheme } from "../src/theme/colorSchemes";
+import { spacing } from "../src/theme";
 
 export default function Index() {
   const { session, loading } = useAuth();
+  const { colors } = useTheme();
+  const styles = useMemo(() => createStyles(colors), [colors]);
   const [showHelp, setShowHelp] = useState(false);
 
   useEffect(() => {
@@ -34,19 +38,21 @@ export default function Index() {
   return <Redirect href={session ? "/(tabs)" : "/auth/sign-in"} />;
 }
 
-const styles = StyleSheet.create({
-  loading: {
-    alignItems: "center",
-    backgroundColor: colors.background,
-    flex: 1,
-    gap: spacing.md,
-    justifyContent: "center",
-    padding: spacing.xl
-  },
-  help: {
-    color: colors.muted,
-    fontSize: 14,
-    lineHeight: 20,
-    textAlign: "center"
-  }
-});
+function createStyles(colors: ColorScheme) {
+  return StyleSheet.create({
+    loading: {
+      alignItems: "center",
+      backgroundColor: colors.background,
+      flex: 1,
+      gap: spacing.md,
+      justifyContent: "center",
+      padding: spacing.xl
+    },
+    help: {
+      color: colors.muted,
+      fontSize: 14,
+      lineHeight: 20,
+      textAlign: "center"
+    }
+  });
+}

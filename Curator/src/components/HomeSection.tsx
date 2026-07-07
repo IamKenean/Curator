@@ -1,6 +1,9 @@
 import type { ReactElement, ReactNode } from "react";
+import { useMemo } from "react";
 import { Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
-import { colors, spacing } from "../theme";
+import { useTheme } from "../providers/ThemeProvider";
+import type { ColorScheme } from "../theme/colorSchemes";
+import { spacing } from "../theme";
 import { FEED_CARD_WIDTH } from "./FeedTitleCard";
 
 type HomeSectionProps<T> = {
@@ -26,6 +29,8 @@ export function HomeSection<T>({
   renderItem,
   keyExtractor
 }: HomeSectionProps<T>) {
+  const { colors } = useTheme();
+  const styles = useMemo(() => createStyles(colors), [colors]);
   const hasItems = data ? data.length > 0 : Boolean(children);
   const canOpen = Boolean(onHeaderPress && hasItems);
 
@@ -66,50 +71,52 @@ export function HomeSection<T>({
   );
 }
 
-const styles = StyleSheet.create({
-  section: {
-    gap: spacing.md
-  },
-  headerPress: {
-    borderRadius: 10
-  },
-  headerRow: {
-    alignItems: "center",
-    flexDirection: "row",
-    gap: spacing.md,
-    justifyContent: "space-between"
-  },
-  headerText: {
-    flex: 1,
-    gap: spacing.xs
-  },
-  title: {
-    color: colors.text,
-    fontSize: 18,
-    fontWeight: "800"
-  },
-  subtitle: {
-    color: colors.muted,
-    fontSize: 13,
-    lineHeight: 18
-  },
-  chevron: {
-    color: colors.muted,
-    fontSize: 28,
-    fontWeight: "300",
-    lineHeight: 28
-  },
-  empty: {
-    color: colors.muted,
-    fontSize: 13
-  },
-  listContent: {
-    gap: spacing.md,
-    paddingRight: spacing.lg
-  },
-  itemWrap: {
-    flexShrink: 0
-  }
-});
+function createStyles(colors: ColorScheme) {
+  return StyleSheet.create({
+    section: {
+      gap: spacing.md
+    },
+    headerPress: {
+      borderRadius: 10
+    },
+    headerRow: {
+      alignItems: "center",
+      flexDirection: "row",
+      gap: spacing.md,
+      justifyContent: "space-between"
+    },
+    headerText: {
+      flex: 1,
+      gap: spacing.xs
+    },
+    title: {
+      color: colors.text,
+      fontSize: 18,
+      fontWeight: "800"
+    },
+    subtitle: {
+      color: colors.muted,
+      fontSize: 13,
+      lineHeight: 18
+    },
+    chevron: {
+      color: colors.muted,
+      fontSize: 28,
+      fontWeight: "300",
+      lineHeight: 28
+    },
+    empty: {
+      color: colors.muted,
+      fontSize: 13
+    },
+    listContent: {
+      gap: spacing.md,
+      paddingRight: spacing.lg
+    },
+    itemWrap: {
+      flexShrink: 0
+    }
+  });
+}
 
 export { FEED_CARD_WIDTH };

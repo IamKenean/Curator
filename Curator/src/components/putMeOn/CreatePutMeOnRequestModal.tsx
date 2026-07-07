@@ -1,6 +1,5 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import {
-  Image,
   KeyboardAvoidingView,
   Modal,
   Platform,
@@ -18,12 +17,15 @@ import {
   PUT_ME_ON_REQUEST_DAYS,
   type CreatePutMeOnRequestInput
 } from "../../lib/putMeOnRequests";
-import { colors, posterBaseUrl, spacing } from "../../theme";
+import { useTheme } from "../../providers/ThemeProvider";
+import type { ColorScheme } from "../../theme";
+import { spacing } from "../../theme";
 import type { TmdbSearchResult, UserProfile } from "../../types";
 import { Button } from "../Button";
 import { TextField } from "../TextField";
 import { TmdbSearch } from "../TmdbSearch";
 import { UserAvatar } from "../UserAvatar";
+import { ExampleFilmSlots } from "./ExampleFilmSlots";
 
 type CreatePutMeOnRequestModalProps = {
   visible: boolean;
@@ -40,6 +42,8 @@ export function CreatePutMeOnRequestModal({
   onClose,
   onCreate
 }: CreatePutMeOnRequestModalProps) {
+  const { colors } = useTheme();
+  const styles = useMemo(() => createStyles(colors), [colors]);
   const insets = useSafeAreaInsets();
   const [prompt, setPrompt] = useState("");
   const [submitting, setSubmitting] = useState(false);
@@ -47,6 +51,7 @@ export function CreatePutMeOnRequestModal({
   const [selectedFriendIds, setSelectedFriendIds] = useState<string[]>([]);
   const [selectedGenres, setSelectedGenres] = useState<string[]>([]);
   const [exampleFilms, setExampleFilms] = useState<TmdbSearchResult[]>([]);
+  const [exampleSearchOpen, setExampleSearchOpen] = useState(false);
 
   useEffect(() => {
     if (!visible) {
@@ -58,6 +63,7 @@ export function CreatePutMeOnRequestModal({
     setSelectedFriendIds(friends.map((friend) => friend.id));
     setSelectedGenres([]);
     setExampleFilms([]);
+    setExampleSearchOpen(false);
   }, [visible, friends]);
 
   async function handleCreate() {
@@ -78,6 +84,15 @@ export function CreatePutMeOnRequestModal({
 
   function handleClose() {
     onClose();
+  }
+
+  function handleDismiss() {
+    if (exampleSearchOpen) {
+      setExampleSearchOpen(false);
+      return;
+    }
+
+    handleClose();
   }
 
   const slotsLeft = MAX_USER_PUT_ME_ON_REQUESTS - activeCount;
@@ -119,11 +134,7 @@ export function CreatePutMeOnRequestModal({
     });
   }
 
-  function addExampleFilm(item: TmdbSearchResult | null) {
-    if (!item) {
-      return;
-    }
-
+  function addExampleFilm(item: TmdbSearchResult) {
     setExampleFilms((current) => {
       if (current.length >= MAX_PUT_ME_ON_EXAMPLE_FILMS) {
         return current;
@@ -144,15 +155,22 @@ export function CreatePutMeOnRequestModal({
     );
   }
 
-  const examplesFull = exampleFilms.length >= MAX_PUT_ME_ON_EXAMPLE_FILMS;
+  function handleExampleSelect(item: TmdbSearchResult | null) {
+    if (!item) {
+      return;
+    }
+
+    addExampleFilm(item);
+    setExampleSearchOpen(false);
+  }
 
   return (
-    <Modal animationType="slide" transparent visible={visible} onRequestClose={handleClose}>
+    <Modal animationType="slide" transparent visible={visible} onRequestClose={handleDismiss}>
       <KeyboardAvoidingView
         behavior={Platform.OS === "ios" ? "padding" : "height"}
         style={styles.overlay}
       >
-        <Pressable style={styles.backdrop} onPress={handleClose} />
+        <Pressable style={styles.backdrop} onPress={handleDismiss} />
         <View style={[styles.sheet, { paddingBottom: insets.bottom + spacing.lg }]}>
           <ScrollView
             bounces={false}
@@ -236,32 +254,15 @@ export function CreatePutMeOnRequestModal({
               </View>
             </View>
 
-            <View style={styles.section}>
-              <Text style={styles.sectionLabel}>Example films (optional)</Text>
-              <Text style={styles.sectionHint}>Up to {MAX_PUT_ME_ON_EXAMPLE_FILMS} titles in the vibe you're after.</Text>
-              {exampleFilms.length > 0 ? (
-                <View style={styles.exampleRow}>
-                  {exampleFilms.map((film) => {
-                    const uri = film.poster_path ? `${posterBaseUrl}${film.poster_path}` : undefined;
-
-                    return (
-                      <View key={`${film.media_type}-${film.id}`} style={styles.exampleItem}>
-                        {uri ? (
-                          <Image source={{ uri }} style={styles.examplePoster} />
-                        ) : (
-                          <View style={[styles.examplePoster, styles.examplePosterFallback]} />
-                        )}
-                        <Pressable hitSlop={6} onPress={() => removeExampleFilm(film)} style={styles.exampleRemove}>
-                          <Text style={styles.exampleRemoveText}>×</Text>
-                        </Pressable>
-                      </View>
-                    );
-                  })}
-                </View>
-              ) : null}
-              {!examplesFull ? (
-                <TmdbSearch onSelect={addExampleFilm} resultsMaxHeight={140} variant="send" />
-              ) : null}
+            <View style={[styles.section, styles.exampleSection]}>
+              <Text style={styles.sectionLabel}>In the vein of (optional)</Text>
+              <Text style={styles.sectionHint}>Tap + to add up to {MAX_PUT_ME_ON_EXAMPLE_FILMS} reference titles.</Text>
+              <ExampleFilmSlots
+                films={exampleFilms}
+                maxSlots={MAX_PUT_ME_ON_EXAMPLE_FILMS}
+                onAddPress={() => setExampleSearchOpen(true)}
+                onRemove={removeExampleFilm}
+              />
             </View>
 
             <Button
@@ -271,12 +272,58 @@ export function CreatePutMeOnRequestModal({
             />
           </ScrollView>
         </View>
+
+        {exampleSearchOpen ? (
+          <View style={styles.pickerOverlay}>
+            <Pressable
+              accessibilityLabel="Close film search"
+              style={styles.pickerScrim}
+              onPress={() => setExampleSearchOpen(false)}
+            />
+            <KeyboardAvoidingView
+              behavior={Platform.OS === "ios" ? "padding" : undefined}
+              keyboardVerticalOffset={insets.top + spacing.md}
+              pointerEvents="box-none"
+              style={styles.pickerCenter}
+            >
+              <View style={styles.pickerCard}>
+                <View style={styles.pickerHeader}>
+                  <View style={styles.pickerHeaderCopy}>
+                    <Text style={styles.pickerTitle}>Pick a reference</Text>
+                    <Text style={styles.pickerSubtitle}>
+                      Choose a film that matches the vibe you're going for.
+                    </Text>
+                  </View>
+                  <Pressable
+                    accessibilityLabel="Close"
+                    hitSlop={10}
+                    onPress={() => setExampleSearchOpen(false)}
+                    style={styles.pickerCloseButton}
+                  >
+                    <Text style={styles.pickerCloseText}>×</Text>
+                  </Pressable>
+                </View>
+
+                <ScrollView
+                  bounces={false}
+                  keyboardShouldPersistTaps="handled"
+                  nestedScrollEnabled
+                  showsVerticalScrollIndicator={false}
+                  contentContainerStyle={styles.pickerBody}
+                >
+                  <TmdbSearch variant="send" resultsMaxHeight={360} onSelect={handleExampleSelect} />
+                </ScrollView>
+              </View>
+            </KeyboardAvoidingView>
+          </View>
+        ) : null}
       </KeyboardAvoidingView>
     </Modal>
   );
 }
 
-const styles = StyleSheet.create({
+function createStyles(colors: ColorScheme) {
+  return StyleSheet.create({
   overlay: {
     flex: 1,
     justifyContent: "flex-end"
@@ -310,6 +357,80 @@ const styles = StyleSheet.create({
     fontSize: 15,
     fontWeight: "700"
   },
+  pickerOverlay: {
+    ...StyleSheet.absoluteFillObject,
+    alignItems: "center",
+    justifyContent: "center",
+    zIndex: 20
+  },
+  pickerScrim: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: "rgba(0,0,0,0.62)"
+  },
+  pickerCenter: {
+    alignItems: "center",
+    justifyContent: "center",
+    maxHeight: "82%",
+    paddingHorizontal: spacing.lg,
+    width: "100%"
+  },
+  pickerCard: {
+    backgroundColor: colors.background,
+    borderColor: colors.border,
+    borderRadius: 20,
+    borderWidth: 1,
+    maxHeight: "100%",
+    overflow: "hidden",
+    width: "100%"
+  },
+  pickerHeader: {
+    alignItems: "flex-start",
+    borderBottomColor: colors.border,
+    borderBottomWidth: 1,
+    flexDirection: "row",
+    gap: spacing.sm,
+    paddingHorizontal: spacing.lg,
+    paddingVertical: spacing.md
+  },
+  pickerHeaderCopy: {
+    flex: 1,
+    gap: spacing.xs
+  },
+  pickerTitle: {
+    color: colors.text,
+    fontSize: 20,
+    fontWeight: "900"
+  },
+  pickerSubtitle: {
+    color: colors.muted,
+    fontSize: 13,
+    lineHeight: 18
+  },
+  pickerCloseButton: {
+    alignItems: "center",
+    backgroundColor: colors.card,
+    borderColor: colors.border,
+    borderRadius: 999,
+    borderWidth: 1,
+    height: 32,
+    justifyContent: "center",
+    width: 32
+  },
+  pickerCloseText: {
+    color: colors.muted,
+    fontSize: 22,
+    fontWeight: "300",
+    lineHeight: 24,
+    marginTop: -2
+  },
+  pickerBody: {
+    gap: spacing.md,
+    padding: spacing.lg
+  },
+  exampleSection: {
+    overflow: "visible",
+    paddingTop: spacing.xs
+  },
   hint: {
     color: colors.muted,
     fontSize: 13,
@@ -340,41 +461,6 @@ const styles = StyleSheet.create({
     fontSize: 12,
     lineHeight: 16,
     marginTop: -spacing.xs
-  },
-  exampleRow: {
-    flexDirection: "row",
-    gap: spacing.sm
-  },
-  exampleItem: {
-    position: "relative"
-  },
-  examplePoster: {
-    backgroundColor: colors.border,
-    borderRadius: 6,
-    height: 72,
-    width: 48
-  },
-  examplePosterFallback: {
-    opacity: 0.5
-  },
-  exampleRemove: {
-    alignItems: "center",
-    backgroundColor: colors.background,
-    borderColor: colors.border,
-    borderRadius: 999,
-    borderWidth: 1,
-    height: 18,
-    justifyContent: "center",
-    position: "absolute",
-    right: -4,
-    top: -4,
-    width: 18
-  },
-  exampleRemoveText: {
-    color: colors.muted,
-    fontSize: 12,
-    fontWeight: "800",
-    lineHeight: 14
   },
   emptyFriends: {
     color: colors.muted,
@@ -448,4 +534,5 @@ const styles = StyleSheet.create({
   friendChipTextSelected: {
     color: colors.text
   }
-});
+  });
+}
