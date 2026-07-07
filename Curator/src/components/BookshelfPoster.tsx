@@ -1,5 +1,8 @@
+import { useMemo } from "react";
 import { Image, StyleSheet, Text, View } from "react-native";
-import { colors, posterBaseUrl, spacing } from "../theme";
+import { useTheme } from "../providers/ThemeProvider";
+import type { ColorScheme } from "../theme/colorSchemes";
+import { posterBaseUrl, spacing } from "../theme";
 import type { TmdbSearchResult } from "../types";
 
 type BookshelfPosterProps = {
@@ -10,6 +13,8 @@ type BookshelfPosterProps = {
 };
 
 export function BookshelfPoster({ tmdb, subtitle, meta, width }: BookshelfPosterProps) {
+  const { colors } = useTheme();
+  const styles = useMemo(() => createStyles(colors), [colors]);
   const posterUri = tmdb?.poster_path ? `${posterBaseUrl}${tmdb.poster_path}` : undefined;
   const height = width * 1.5;
 
@@ -41,36 +46,38 @@ export function BookshelfPoster({ tmdb, subtitle, meta, width }: BookshelfPoster
   );
 }
 
-const styles = StyleSheet.create({
-  card: {
-    gap: spacing.xs
-  },
-  poster: {
-    backgroundColor: colors.border,
-    borderRadius: 8
-  },
-  fallback: {
-    alignItems: "center",
-    justifyContent: "center"
-  },
-  fallbackText: {
-    color: colors.muted,
-    fontSize: 10
-  },
-  title: {
-    color: colors.text,
-    fontSize: 11,
-    fontWeight: "800",
-    lineHeight: 14
-  },
-  subtitle: {
-    color: colors.star,
-    fontSize: 10,
-    fontWeight: "700"
-  },
-  meta: {
-    color: colors.muted,
-    fontSize: 9,
-    fontWeight: "700"
-  }
-});
+function createStyles(colors: ColorScheme) {
+  return StyleSheet.create({
+    card: {
+      gap: spacing.xs
+    },
+    poster: {
+      backgroundColor: colors.border,
+      borderRadius: 8
+    },
+    fallback: {
+      alignItems: "center",
+      justifyContent: "center"
+    },
+    fallbackText: {
+      color: colors.muted,
+      fontSize: 10
+    },
+    title: {
+      color: colors.text,
+      fontSize: 11,
+      fontWeight: "800",
+      lineHeight: 14
+    },
+    subtitle: {
+      color: colors.star,
+      fontSize: 10,
+      fontWeight: "700"
+    },
+    meta: {
+      color: colors.muted,
+      fontSize: 9,
+      fontWeight: "700"
+    }
+  });
+}

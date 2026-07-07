@@ -1,22 +1,33 @@
 import { useFocusEffect, useRouter } from "expo-router";
-import { useCallback, useState } from "react";
-import { Alert, Dimensions, ScrollView, StyleSheet, Text, View } from "react-native";
+import { useCallback, useMemo, useState } from "react";
+import { Alert, Dimensions, ScrollView, StyleSheet, View } from "react-native";
+import { ContentSubTabs } from "../../src/components/ContentSubTabs";
+import { EmptyState } from "../../src/components/EmptyState";
+import { FilmDetailModal, filmTargetFromItem } from "../../src/components/FilmDetailModal";
 import { FeedTitleCard, TrustFriendCard } from "../../src/components/FeedTitleCard";
 import { HomeSection } from "../../src/components/HomeSection";
 import { InboxFilmCard } from "../../src/components/InboxFilmCard";
+import { ListsPanel } from "../../src/components/lists/ListsPanel";
 import { RatingModal } from "../../src/components/RatingModal";
 import { RecommendationActionModal } from "../../src/components/RecommendationActionModal";
 import { Screen } from "../../src/components/Screen";
+import { TabTopBar, TabTopBarSpacer } from "../../src/components/TabTopBar";
+import { getListsFeed, hydrateListEntries, type CuratorList } from "../../src/lib/curatorLists";
 import { formatComparison, formatStarRating } from "../../src/lib/ratings";
 import { getHomeFeed } from "../../src/lib/homeFeed";
 import { getTmdbTitle } from "../../src/lib/tmdb";
 import { getIncomingPendingRecommendations, markRecommendationWatchedAndRate } from "../../src/lib/recommendations";
 import { syncInboxNotifications } from "../../src/lib/notifications";
+import { getFriendships } from "../../src/lib/social";
 import { useAuth } from "../../src/providers/AuthProvider";
-import { colors, spacing } from "../../src/theme";
+import { useTheme } from "../../src/providers/ThemeProvider";
+import type { ColorScheme } from "../../src/theme";
+import { spacing } from "../../src/theme";
 import type { HomeCategorySlug } from "../../src/lib/homeCategories";
 
 import type { HomeFeed, Recommendation, TmdbSearchResult } from "../../src/types";
+
+const HOME_SUB_TABS = ["Films", "Reviews", "Lists", "Journal"] as const;
 
 type HydratedRecommendation = Recommendation & {
   tmdb?: TmdbSearchResult;
@@ -37,11 +48,16 @@ const emptyFeed: HomeFeed = {
 export default function HomeScreen() {
   const router = useRouter();
   const { user } = useAuth();
+  const { colors } = useTheme();
+  const styles = useMemo(() => createStyles(colors), [colors]);
   const [inbox, setInbox] = useState<HydratedRecommendation[]>([]);
   const [feed, setFeed] = useState<HomeFeed>(emptyFeed);
+  const [memberLists, setMemberLists] = useState<CuratorList[]>([]);
+  const [activeSubTab, setActiveSubTab] = useState<(typeof HOME_SUB_TABS)[number]>("Films");
   const [loading, setLoading] = useState(false);
   const [selectedRecommendation, setSelectedRecommendation] = useState<HydratedRecommendation | null>(null);
   const [ratingTarget, setRatingTarget] = useState<HydratedRecommendation | null>(null);
+  const [filmDetailTarget, setFilmDetailTarget] = useState<TmdbSearchResult | null>(null);
 
   const load = useCallback(async () => {
     if (!user) {
@@ -50,9 +66,15 @@ export default function HomeScreen() {
 
     setLoading(true);
     try {
-      const [recommendations, homeFeed] = await Promise.all([
+      const friendships = await getFriendships(user.id);
+      const friendIds = friendships
+        .filter((friendship) => friendship.status === "accepted")
+        .map((friendship) => (friendship.user_id === user.id ? friendship.friend_id : friendship.user_id));
+
+      const [recommendations, homeFeed, listsFeed] = await Promise.all([
         getIncomingPendingRecommendations(user.id),
-        getHomeFeed(user.id)
+        getHomeFeed(user.id),
+        getListsFeed(user.id, friendIds)
       ]);
 
       const hydratedInbox = await Promise.all(
@@ -64,6 +86,13 @@ export default function HomeScreen() {
 
       setInbox(hydratedInbox);
       setFeed(homeFeed);
+      setMemberLists(
+        await Promise.all(
+          listsFeed
+            .filter((list) => list.owner_id !== user.id)
+            .map((list) => hydrateListEntries(list))
+        )
+      );
       void syncInboxNotifications(hydratedInbox);
     } catch (error) {
       Alert.alert("Could not load home", (error as Error).message);
@@ -107,14 +136,22 @@ export default function HomeScreen() {
     router.push({ pathname: "/category/[slug]", params: { slug } });
   }
 
+  function openList(listId: string) {
+    router.push({ pathname: "/list/[id]", params: { id: listId } });
+  }
+
+  function openFilmDetail(item: { tmdb_id: number; media_type: TmdbSearchResult["media_type"]; tmdb?: TmdbSearchResult }) {
+    setFilmDetailTarget(filmTargetFromItem(item));
+  }
+
   return (
-    <Screen scroll stickyHeaderIndices={[0]}>
-      <View style={styles.appHeader}>
-        <Text style={styles.appTitle}>Curator</Text>
-      </View>
+    <Screen scroll edges={["left", "right"]} contentContainerStyle={styles.screenContent}>
+      <TabTopBar title="Curator" left={<TabTopBarSpacer />} right={<TabTopBarSpacer />} />
 
-      {loading ? <Text style={styles.muted}>Loading...</Text> : null}
+      <ContentSubTabs tabs={HOME_SUB_TABS} activeTab={activeSubTab} onTabPress={setActiveSubTab} />
 
+      {activeSubTab === "Films" ? (
+        <>
       <HomeSection
         title="Inbox"
         count={inbox.length}
@@ -154,6 +191,7 @@ export default function HomeScreen() {
             tmdb={item.tmdb}
             subtitle={item.avg_rating ? `${formatStarRating(Number(item.avg_rating))} ★ avg` : undefined}
             meta={item.rating_count ? `${item.rating_count} ratings` : undefined}
+            onPress={() => openFilmDetail(item)}
           />
         )}
       />
@@ -170,6 +208,7 @@ export default function HomeScreen() {
             tmdb={item.tmdb}
             subtitle={item.avg_rating ? `${formatStarRating(Number(item.avg_rating))} ★ avg` : undefined}
             meta={item.rating_count ? `${item.rating_count} ratings` : undefined}
+            onPress={() => openFilmDetail(item)}
           />
         )}
       />
@@ -186,6 +225,7 @@ export default function HomeScreen() {
             tmdb={item.tmdb}
             subtitle={`${formatStarRating(Number(item.rating_value))} ★`}
             user={{ username: item.username, avatar_url: item.avatar_url }}
+            onPress={() => openFilmDetail(item)}
           />
         )}
       />
@@ -204,6 +244,7 @@ export default function HomeScreen() {
             avatarUrl={item.avatar_url}
             trustScore={Number(item.trust_score)}
             rating={Number(item.rating_value)}
+            onPress={() => openFilmDetail(item)}
           />
         )}
       />
@@ -220,6 +261,7 @@ export default function HomeScreen() {
             tmdb={item.tmdb}
             subtitle={item.avg_rating ? `${formatStarRating(Number(item.avg_rating))} ★ avg` : undefined}
             meta={item.rating_count ? `${item.rating_count} ratings` : undefined}
+            onPress={() => openFilmDetail(item)}
           />
         )}
       />
@@ -236,8 +278,35 @@ export default function HomeScreen() {
             tmdb={item.tmdb}
             subtitle={item.avg_rating ? `${formatStarRating(Number(item.avg_rating))} ★ avg` : undefined}
             meta={item.match_score ? `${Math.round(Number(item.match_score) * 100)}% taste match` : undefined}
+            onPress={() => openFilmDetail(item)}
           />
         )}
+      />
+
+        </>
+      ) : activeSubTab === "Lists" ? (
+        <View style={styles.tabPanel}>
+          <ListsPanel
+            lists={memberLists}
+            showOwner
+            emptyTitle="No member lists yet"
+            emptyBody="Public lists and friends-only lists from people you follow will show up here."
+            onListPress={(list) => openList(list.id)}
+          />
+        </View>
+      ) : (
+        <View style={styles.tabPanel}>
+          <EmptyState
+            title={`${activeSubTab} coming soon`}
+            body="This home tab will mirror the matching profile section once it ships."
+          />
+        </View>
+      )}
+
+      <FilmDetailModal
+        visible={Boolean(filmDetailTarget)}
+        title={filmDetailTarget}
+        onClose={() => setFilmDetailTarget(null)}
       />
 
       <RecommendationActionModal
@@ -265,30 +334,24 @@ export default function HomeScreen() {
   );
 }
 
-const styles = StyleSheet.create({
-  appHeader: {
-    backgroundColor: colors.background,
-    borderBottomColor: colors.border,
-    borderBottomWidth: 1,
-    marginHorizontal: -spacing.lg,
-    paddingBottom: spacing.md,
-    paddingHorizontal: spacing.lg,
-    paddingTop: spacing.sm
-  },
-  appTitle: {
-    color: colors.text,
-    fontSize: 32,
-    fontWeight: "900",
-    letterSpacing: -0.8
-  },
-  inboxContent: {
-    gap: INBOX_GAP,
-    paddingRight: spacing.lg
-  },
-  inboxItem: {
-    flexShrink: 0
-  },
-  muted: {
-    color: colors.muted
-  }
-});
+function createStyles(colors: ColorScheme) {
+  return StyleSheet.create({
+    screenContent: {
+      gap: spacing.sm,
+      paddingBottom: spacing.md,
+      paddingHorizontal: spacing.sm,
+      paddingTop: 0
+    },
+    tabPanel: {
+      gap: spacing.sm,
+      paddingBottom: spacing.md
+    },
+    inboxContent: {
+      gap: INBOX_GAP,
+      paddingRight: spacing.lg
+    },
+    inboxItem: {
+      flexShrink: 0
+    }
+  });
+}

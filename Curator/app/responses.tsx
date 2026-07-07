@@ -9,14 +9,18 @@ import { SortChip, SortChipRow } from "../src/components/SortChip";
 import { formatComparison, formatStarRating } from "../src/lib/ratings";
 import { getSentRatedRecommendations } from "../src/lib/recommendations";
 import { useAuth } from "../src/providers/AuthProvider";
-import { colors, spacing } from "../src/theme";
+import { useTheme } from "../src/providers/ThemeProvider";
+import type { ColorScheme } from "../src/theme";
+import { spacing } from "../src/theme";
 import type { RatedRecommendation, UserProfile } from "../src/types";
 
 const PREVIEW_LIMIT = 3;
 
 type SortOption = "newest" | "oldest" | "rating_high" | "rating_low";
 
-function ResponseCard({ item }: { item: RatedRecommendation }) {
+type ResponseStyles = ReturnType<typeof createStyles>;
+
+function ResponseCard({ item, styles }: { item: RatedRecommendation; styles: ResponseStyles }) {
   const actual = item.rating?.rating_value ?? 0;
   const comparison = formatComparison(item.estimated_rating, actual);
 
@@ -46,6 +50,8 @@ const DEFAULT_SORT: SortOption = "newest";
 
 export default function ResponsesScreen() {
   const { user } = useAuth();
+  const { colors } = useTheme();
+  const styles = useMemo(() => createStyles(colors), [colors]);
   const [items, setItems] = useState<RatedRecommendation[]>([]);
   const [loading, setLoading] = useState(false);
   const [showAll, setShowAll] = useState(false);
@@ -163,7 +169,7 @@ export default function ResponsesScreen() {
       ) : null}
 
       {visibleItems.map((item) => (
-        <ResponseCard key={item.id} item={item} />
+        <ResponseCard key={item.id} item={item} styles={styles} />
       ))}
 
       {!loading && hasHiddenItems && !showAll ? (
@@ -177,7 +183,8 @@ export default function ResponsesScreen() {
   );
 }
 
-const styles = StyleSheet.create({
+function createStyles(colors: ColorScheme) {
+  return StyleSheet.create({
   filters: {
     gap: spacing.sm
   },
@@ -219,4 +226,5 @@ const styles = StyleSheet.create({
   muted: {
     color: colors.muted
   }
-});
+  });
+}

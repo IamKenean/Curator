@@ -3,7 +3,9 @@ import * as Haptics from "expo-haptics";
 import { useMemo, useRef, useState } from "react";
 import { PanResponder, Platform, Pressable, StyleSheet, Text, View, type LayoutChangeEvent } from "react-native";
 import { formatStarRating, ratingFromTouchX, starLabel } from "../lib/ratings";
-import { colors, spacing } from "../theme";
+import { useTheme } from "../providers/ThemeProvider";
+import type { ColorScheme } from "../theme/colorSchemes";
+import { spacing } from "../theme";
 
 type StarRatingPickerProps = {
   value: number;
@@ -49,9 +51,12 @@ export function StarRatingPicker({
   compact = false,
   sendStyle = false,
   emptyLabel = "Not sure",
-  starEmptyColor = colors.border,
+  starEmptyColor,
   onInteractionChange
 }: StarRatingPickerProps) {
+  const { colors } = useTheme();
+  const styles = useMemo(() => createStyles(colors), [colors]);
+  const resolvedStarEmptyColor = starEmptyColor ?? colors.border;
   const [hoverValue, setHoverValue] = useState(0);
   const [trackWidth, setTrackWidth] = useState(0);
   const lastHapticValue = useRef(0);
@@ -150,8 +155,8 @@ export function StarRatingPicker({
               <View key={index} style={[styles.starButton, sendStyle && styles.starButtonSend]}>
                 <Ionicons
                   name={icon}
-                  size={sendStyle ? 26 : STAR_SIZE}
-                  color={filled ? colors.star : starEmptyColor}
+                  size={sendStyle ? 24 : STAR_SIZE}
+                  color={filled ? colors.star : resolvedStarEmptyColor}
                 />
               </View>
             );
@@ -182,125 +187,127 @@ export function StarRatingPicker({
   );
 }
 
-const styles = StyleSheet.create({
-  wrap: {
-    alignItems: "center",
-    gap: spacing.md
-  },
-  wrapSend: {
-    gap: spacing.xs
-  },
-  label: {
-    color: colors.muted,
-    fontSize: 11,
-    fontWeight: "700",
-    letterSpacing: 1.2,
-    textTransform: "uppercase"
-  },
-  display: {
-    alignItems: "center",
-    gap: 4,
-    minHeight: 52
-  },
-  displayCompact: {
-    minHeight: 40
-  },
-  number: {
-    color: colors.text,
-    fontSize: 42,
-    fontWeight: "800",
-    lineHeight: 44
-  },
-  numberCompact: {
-    fontSize: 32,
-    lineHeight: 34
-  },
-  caption: {
-    color: colors.muted,
-    fontSize: 13,
-    fontStyle: "italic"
-  },
-  trackSlot: {
-    alignItems: "center",
-    justifyContent: "center",
-    minHeight: TRACK_SLOT_HEIGHT,
-    width: "100%"
-  },
-  trackSlotSend: {
-    minHeight: 34
-  },
-  sendLabel: {
-    color: colors.muted,
-    fontSize: 12,
-    fontWeight: "600"
-  },
-  track: {
-    flexDirection: "row",
-    gap: 6,
-    paddingVertical: spacing.sm
-  },
-  trackSend: {
-    gap: 4,
-    paddingVertical: spacing.xs
-  },
-  starButton: {
-    alignItems: "center",
-    height: STAR_SIZE,
-    justifyContent: "center",
-    width: STAR_SIZE
-  },
-  starButtonSend: {
-    height: 28,
-    width: 28
-  },
-  footer: {
-    alignItems: "center",
-    flexDirection: "row",
-    gap: spacing.md,
-    justifyContent: "center"
-  },
-  clearBtn: {
-    borderColor: colors.border,
-    borderRadius: 20,
-    borderWidth: 1,
-    paddingHorizontal: spacing.lg,
-    paddingVertical: spacing.sm
-  },
-  clearBtnDisabled: {
-    opacity: 0.35
-  },
-  clearText: {
-    color: colors.muted,
-    fontSize: 11,
-    fontWeight: "700",
-    letterSpacing: 0.8,
-    textTransform: "uppercase"
-  },
-  heartBtn: {
-    alignItems: "center",
-    borderColor: colors.border,
-    borderRadius: 20,
-    borderWidth: 1,
-    flexDirection: "row",
-    gap: spacing.sm,
-    paddingHorizontal: spacing.lg,
-    paddingVertical: spacing.sm
-  },
-  heartBtnActive: {
-    borderColor: colors.accent
-  },
-  heart: {
-    color: colors.muted,
-    fontSize: 18
-  },
-  heartActive: {
-    color: colors.accent
-  },
-  heartLabel: {
-    color: colors.muted,
-    fontSize: 11,
-    fontWeight: "700",
-    letterSpacing: 0.8,
-    textTransform: "uppercase"
-  }
-});
+function createStyles(colors: ColorScheme) {
+  return StyleSheet.create({
+    wrap: {
+      alignItems: "center",
+      gap: spacing.md
+    },
+    wrapSend: {
+      gap: spacing.xs
+    },
+    label: {
+      color: colors.muted,
+      fontSize: 11,
+      fontWeight: "700",
+      letterSpacing: 1.2,
+      textTransform: "uppercase"
+    },
+    display: {
+      alignItems: "center",
+      gap: 4,
+      minHeight: 52
+    },
+    displayCompact: {
+      minHeight: 40
+    },
+    number: {
+      color: colors.text,
+      fontSize: 42,
+      fontWeight: "800",
+      lineHeight: 44
+    },
+    numberCompact: {
+      fontSize: 32,
+      lineHeight: 34
+    },
+    caption: {
+      color: colors.muted,
+      fontSize: 13,
+      fontStyle: "italic"
+    },
+    trackSlot: {
+      alignItems: "center",
+      justifyContent: "center",
+      minHeight: TRACK_SLOT_HEIGHT,
+      width: "100%"
+    },
+    trackSlotSend: {
+      minHeight: 28
+    },
+    sendLabel: {
+      color: colors.muted,
+      fontSize: 11,
+      fontWeight: "600"
+    },
+    track: {
+      flexDirection: "row",
+      gap: 6,
+      paddingVertical: spacing.sm
+    },
+    trackSend: {
+      gap: 4,
+      paddingVertical: spacing.xs
+    },
+    starButton: {
+      alignItems: "center",
+      height: STAR_SIZE,
+      justifyContent: "center",
+      width: STAR_SIZE
+    },
+    starButtonSend: {
+      height: 28,
+      width: 28
+    },
+    footer: {
+      alignItems: "center",
+      flexDirection: "row",
+      gap: spacing.md,
+      justifyContent: "center"
+    },
+    clearBtn: {
+      borderColor: colors.border,
+      borderRadius: 20,
+      borderWidth: 1,
+      paddingHorizontal: spacing.lg,
+      paddingVertical: spacing.sm
+    },
+    clearBtnDisabled: {
+      opacity: 0.35
+    },
+    clearText: {
+      color: colors.muted,
+      fontSize: 11,
+      fontWeight: "700",
+      letterSpacing: 0.8,
+      textTransform: "uppercase"
+    },
+    heartBtn: {
+      alignItems: "center",
+      borderColor: colors.border,
+      borderRadius: 20,
+      borderWidth: 1,
+      flexDirection: "row",
+      gap: spacing.sm,
+      paddingHorizontal: spacing.lg,
+      paddingVertical: spacing.sm
+    },
+    heartBtnActive: {
+      borderColor: colors.accent
+    },
+    heart: {
+      color: colors.muted,
+      fontSize: 18
+    },
+    heartActive: {
+      color: colors.accent
+    },
+    heartLabel: {
+      color: colors.muted,
+      fontSize: 11,
+      fontWeight: "700",
+      letterSpacing: 0.8,
+      textTransform: "uppercase"
+    }
+  });
+}

@@ -1,13 +1,15 @@
 import { Ionicons } from "@expo/vector-icons";
 import { useMemo, useState } from "react";
 import { Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
-import { colors, spacing } from "../theme";
+import { useTheme } from "../providers/ThemeProvider";
+import type { ColorScheme } from "../theme/colorSchemes";
+import { spacing } from "../theme";
 import type { UserProfile } from "../types";
 import { SearchField } from "./SearchField";
 import { UserAvatar } from "./UserAvatar";
 
 const FRIEND_ROW_HEIGHT = 56;
-const FRIEND_ROW_HEIGHT_SEND = 46;
+const FRIEND_ROW_HEIGHT_SEND = 44;
 const DEFAULT_VISIBLE_COUNT = 2;
 
 type FriendPickerProps = {
@@ -16,6 +18,7 @@ type FriendPickerProps = {
   onSelect: (friend: UserProfile) => void;
   visibleCount?: number;
   variant?: "default" | "send";
+  fill?: boolean;
 };
 
 function isOnlineSeed(userId: string) {
@@ -31,8 +34,11 @@ export function FriendPicker({
   selected,
   onSelect,
   visibleCount = DEFAULT_VISIBLE_COUNT,
-  variant = "default"
+  variant = "default",
+  fill = false
 }: FriendPickerProps) {
+  const { colors } = useTheme();
+  const styles = useMemo(() => createStyles(colors), [colors]);
   const [query, setQuery] = useState("");
   const isSend = variant === "send";
 
@@ -52,7 +58,7 @@ export function FriendPicker({
     (isSend ? 0 : spacing.sm * 2);
 
   return (
-    <View style={[styles.wrap, isSend && styles.wrapSend]}>
+    <View style={[styles.wrap, isSend && styles.wrapSend, fill && styles.wrapFill]}>
       <SearchField
         compact={isSend}
         placeholder="Find a friend by username"
@@ -70,7 +76,10 @@ export function FriendPicker({
           keyboardShouldPersistTaps="always"
           nestedScrollEnabled
           showsVerticalScrollIndicator={false}
-          style={[isSend ? styles.listSend : styles.list, { maxHeight: listMaxHeight }]}
+          style={[
+            isSend ? styles.listSend : styles.list,
+            fill ? styles.listFill : { maxHeight: listMaxHeight }
+          ]}
           contentContainerStyle={isSend ? styles.listContentSend : styles.listContent}
         >
           {filteredFriends.map((item, index) => {
@@ -85,7 +94,7 @@ export function FriendPicker({
                     style={[styles.friendSend, isSelected && styles.friendSendSelected]}
                   >
                     <View style={styles.avatarWrap}>
-                      <UserAvatar profile={item} size={34} />
+                      <UserAvatar profile={item} size={32} />
                       <View
                         style={[
                           styles.statusDot,
@@ -123,104 +132,114 @@ export function FriendPicker({
   );
 }
 
-const styles = StyleSheet.create({
-  wrap: {
-    gap: spacing.md
-  },
-  wrapSend: {
-    gap: spacing.sm
-  },
-  list: {
-    backgroundColor: colors.card,
-    borderColor: colors.border,
-    borderRadius: 14,
-    borderWidth: 1
-  },
-  listSend: {
-    backgroundColor: colors.background,
-    borderColor: colors.border,
-    borderRadius: 10,
-    borderWidth: 1
-  },
-  listContent: {
-    padding: spacing.sm
-  },
-  listContentSend: {
-    paddingHorizontal: spacing.sm
-  },
-  separator: {
-    height: spacing.sm
-  },
-  divider: {
-    backgroundColor: colors.border,
-    height: 1,
-    marginHorizontal: spacing.sm
-  },
-  friend: {
-    alignItems: "center",
-    backgroundColor: colors.background,
-    borderColor: colors.border,
-    borderRadius: 12,
-    borderWidth: 1,
-    flexDirection: "row",
-    justifyContent: "space-between",
-    minHeight: FRIEND_ROW_HEIGHT,
-    paddingHorizontal: spacing.md,
-    paddingVertical: spacing.sm
-  },
-  selected: {
-    borderColor: colors.accent,
-    borderWidth: 2
-  },
-  friendSend: {
-    alignItems: "center",
-    flexDirection: "row",
-    gap: spacing.sm + 2,
-    minHeight: FRIEND_ROW_HEIGHT_SEND,
-    paddingHorizontal: spacing.sm,
-    paddingVertical: spacing.xs + 2
-  },
-  friendSendSelected: {
-    backgroundColor: "rgba(230, 57, 70, 0.08)"
-  },
-  avatarWrap: {
-    position: "relative"
-  },
-  statusDot: {
-    borderColor: colors.background,
-    borderRadius: 4,
-    borderWidth: 1.5,
-    bottom: 0,
-    height: 8,
-    position: "absolute",
-    right: 0,
-    width: 8
-  },
-  statusOnline: {
-    backgroundColor: colors.success
-  },
-  statusOffline: {
-    backgroundColor: colors.muted
-  },
-  friendName: {
-    color: colors.text,
-    fontSize: 17,
-    fontWeight: "800"
-  },
-  friendNameSend: {
-    color: colors.text,
-    flex: 1,
-    fontSize: 14,
-    fontWeight: "700"
-  },
-  check: {
-    color: colors.accent,
-    fontSize: 13,
-    fontWeight: "800"
-  },
-  empty: {
-    color: colors.muted,
-    fontSize: 13,
-    lineHeight: 18
-  }
-});
+function createStyles(colors: ColorScheme) {
+  return StyleSheet.create({
+    wrap: {
+      gap: spacing.md
+    },
+    wrapSend: {
+      gap: spacing.xs
+    },
+    wrapFill: {
+      flex: 1,
+      minHeight: 0
+    },
+    list: {
+      backgroundColor: colors.card,
+      borderColor: colors.border,
+      borderRadius: 14,
+      borderWidth: 1
+    },
+    listSend: {
+      backgroundColor: colors.background,
+      borderColor: colors.border,
+      borderRadius: 10,
+      borderWidth: 1
+    },
+    listFill: {
+      flex: 1,
+      minHeight: 0
+    },
+    listContent: {
+      padding: spacing.sm
+    },
+    listContentSend: {
+      paddingHorizontal: spacing.sm
+    },
+    separator: {
+      height: spacing.sm
+    },
+    divider: {
+      backgroundColor: colors.border,
+      height: 1,
+      marginHorizontal: spacing.sm
+    },
+    friend: {
+      alignItems: "center",
+      backgroundColor: colors.background,
+      borderColor: colors.border,
+      borderRadius: 12,
+      borderWidth: 1,
+      flexDirection: "row",
+      justifyContent: "space-between",
+      minHeight: FRIEND_ROW_HEIGHT,
+      paddingHorizontal: spacing.md,
+      paddingVertical: spacing.sm
+    },
+    selected: {
+      borderColor: colors.accent,
+      borderWidth: 2
+    },
+    friendSend: {
+      alignItems: "center",
+      flexDirection: "row",
+      gap: spacing.sm + 2,
+      minHeight: FRIEND_ROW_HEIGHT_SEND,
+      paddingHorizontal: spacing.sm,
+      paddingVertical: spacing.xs + 2
+    },
+    friendSendSelected: {
+      backgroundColor: "rgba(230, 57, 70, 0.08)"
+    },
+    avatarWrap: {
+      position: "relative"
+    },
+    statusDot: {
+      borderColor: colors.background,
+      borderRadius: 4,
+      borderWidth: 1.5,
+      bottom: 0,
+      height: 8,
+      position: "absolute",
+      right: 0,
+      width: 8
+    },
+    statusOnline: {
+      backgroundColor: colors.success
+    },
+    statusOffline: {
+      backgroundColor: colors.muted
+    },
+    friendName: {
+      color: colors.text,
+      fontSize: 17,
+      fontWeight: "800"
+    },
+    friendNameSend: {
+      color: colors.text,
+      flex: 1,
+      fontSize: 14,
+      fontWeight: "700"
+    },
+    check: {
+      color: colors.accent,
+      fontSize: 13,
+      fontWeight: "800"
+    },
+    empty: {
+      color: colors.muted,
+      fontSize: 13,
+      lineHeight: 18
+    }
+  });
+}

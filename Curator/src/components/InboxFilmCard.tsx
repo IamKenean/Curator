@@ -1,6 +1,9 @@
+import { useMemo } from "react";
 import { Image, Pressable, StyleSheet, Text, View } from "react-native";
 import { formatStarRating } from "../lib/ratings";
-import { colors, posterBaseUrl, spacing } from "../theme";
+import { useTheme } from "../providers/ThemeProvider";
+import type { ColorScheme } from "../theme/colorSchemes";
+import { posterBaseUrl, spacing } from "../theme";
 import type { Recommendation, TmdbSearchResult } from "../types";
 import { UserAvatar } from "./UserAvatar";
 
@@ -12,6 +15,8 @@ type InboxFilmCardProps = {
 };
 
 export function InboxFilmCard({ recommendation, tmdb, width, onPress }: InboxFilmCardProps) {
+  const { colors } = useTheme();
+  const styles = useMemo(() => createStyles(colors), [colors]);
   const posterUri = tmdb?.poster_path ? `${posterBaseUrl}${tmdb.poster_path}` : undefined;
   const posterHeight = width * 1.45;
 
@@ -45,48 +50,50 @@ export function InboxFilmCard({ recommendation, tmdb, width, onPress }: InboxFil
   );
 }
 
-const styles = StyleSheet.create({
-  card: {
-    gap: spacing.xs
-  },
-  poster: {
-    backgroundColor: colors.border,
-    borderColor: colors.border,
-    borderRadius: 10,
-    borderWidth: 1
-  },
-  posterFallback: {
-    alignItems: "center",
-    justifyContent: "center"
-  },
-  posterFallbackText: {
-    color: colors.muted,
-    fontSize: 9
-  },
-  senderRow: {
-    alignItems: "center",
-    flexDirection: "row",
-    gap: spacing.xs
-  },
-  username: {
-    color: colors.muted,
-    flex: 1,
-    fontSize: 10,
-    fontWeight: "700"
-  },
-  estimate: {
-    color: colors.star,
-    fontSize: 10,
-    fontWeight: "700"
-  },
-  senderRating: {
-    color: colors.muted,
-    fontSize: 10,
-    fontWeight: "700"
-  },
-  title: {
-    color: colors.text,
-    fontSize: 11,
-    fontWeight: "800"
-  }
-});
+function createStyles(colors: ColorScheme) {
+  return StyleSheet.create({
+    card: {
+      gap: spacing.xs
+    },
+    poster: {
+      backgroundColor: colors.border,
+      borderColor: colors.border,
+      borderRadius: 10,
+      borderWidth: 1
+    },
+    posterFallback: {
+      alignItems: "center",
+      justifyContent: "center"
+    },
+    posterFallbackText: {
+      color: colors.muted,
+      fontSize: 9
+    },
+    senderRow: {
+      alignItems: "center",
+      flexDirection: "row",
+      gap: spacing.xs
+    },
+    username: {
+      color: colors.muted,
+      flex: 1,
+      fontSize: 10,
+      fontWeight: "700"
+    },
+    estimate: {
+      color: colors.star,
+      fontSize: 10,
+      fontWeight: "700"
+    },
+    senderRating: {
+      color: colors.muted,
+      fontSize: 10,
+      fontWeight: "700"
+    },
+    title: {
+      color: colors.text,
+      fontSize: 11,
+      fontWeight: "800"
+    }
+  });
+}

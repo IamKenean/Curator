@@ -55,3 +55,23 @@ export function reminderNotificationBody(recommendationId: string, senderUsernam
     title: title ?? undefined
   });
 }
+
+export const PUT_ME_ON_REQUEST_TITLE = "Put Me On request";
+
+export const PUT_ME_ON_REQUEST_TEMPLATES = [
+  "{name} is looking for a rec.",
+  "{name} wants to be put on.",
+  "{name} asked: \"{prompt}\"",
+  "Your friend {name} needs a pick.",
+  "{name} opened a Put Me On request."
+] as const;
+
+export function putMeOnRequestNotificationBody(requestId: string, senderUsername?: string | null, prompt?: string | null) {
+  const template = pickTemplate(PUT_ME_ON_REQUEST_TEMPLATES, requestId);
+  const name = senderUsername ? `@${senderUsername}` : "A friend";
+  const trimmedPrompt = prompt?.trim();
+  const preview =
+    trimmedPrompt && trimmedPrompt.length > 48 ? `${trimmedPrompt.slice(0, 45)}...` : trimmedPrompt ?? "something new";
+
+  return template.replaceAll("{name}", name).replaceAll("{prompt}", preview);
+}

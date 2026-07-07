@@ -1,6 +1,9 @@
 import type { ReactNode } from "react";
+import { useMemo } from "react";
 import { Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
-import { colors, spacing } from "../theme";
+import { useTheme } from "../providers/ThemeProvider";
+import type { ColorScheme } from "../theme/colorSchemes";
+import { spacing } from "../theme";
 
 type SortChipProps = {
   label: string;
@@ -9,6 +12,9 @@ type SortChipProps = {
 };
 
 export function SortChip({ label, selected, onPress }: SortChipProps) {
+  const { colors } = useTheme();
+  const styles = useMemo(() => createStyles(colors), [colors]);
+
   return (
     <Pressable onPress={onPress} style={[styles.chip, selected && styles.chipSelected]}>
       <Text style={[styles.chipText, selected && styles.chipTextSelected]} numberOfLines={1}>
@@ -20,13 +26,13 @@ export function SortChip({ label, selected, onPress }: SortChipProps) {
 
 export function SortChipRow({ children }: { children: ReactNode }) {
   return (
-    <View style={styles.rowWrap}>
+    <View style={rowStyles.rowWrap}>
       <ScrollView
         horizontal
         nestedScrollEnabled
         showsHorizontalScrollIndicator={false}
-        style={styles.scroll}
-        contentContainerStyle={styles.scrollContent}
+        style={rowStyles.scroll}
+        contentContainerStyle={rowStyles.scrollContent}
       >
         {children}
       </ScrollView>
@@ -34,7 +40,34 @@ export function SortChipRow({ children }: { children: ReactNode }) {
   );
 }
 
-const styles = StyleSheet.create({
+function createStyles(colors: ColorScheme) {
+  return StyleSheet.create({
+    chip: {
+      alignSelf: "flex-start",
+      backgroundColor: colors.card,
+      borderColor: colors.border,
+      borderRadius: 999,
+      borderWidth: 1,
+      flexShrink: 0,
+      paddingHorizontal: spacing.md,
+      paddingVertical: spacing.sm
+    },
+    chipSelected: {
+      backgroundColor: colors.accent,
+      borderColor: colors.accent
+    },
+    chipText: {
+      color: colors.text,
+      fontSize: 13,
+      fontWeight: "700"
+    },
+    chipTextSelected: {
+      color: colors.text
+    }
+  });
+}
+
+const rowStyles = StyleSheet.create({
   rowWrap: {
     flexGrow: 0,
     flexShrink: 0
@@ -48,27 +81,5 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     gap: spacing.sm,
     paddingRight: spacing.sm
-  },
-  chip: {
-    alignSelf: "flex-start",
-    backgroundColor: colors.card,
-    borderColor: colors.border,
-    borderRadius: 999,
-    borderWidth: 1,
-    flexShrink: 0,
-    paddingHorizontal: spacing.md,
-    paddingVertical: spacing.sm
-  },
-  chipSelected: {
-    backgroundColor: colors.accent,
-    borderColor: colors.accent
-  },
-  chipText: {
-    color: colors.text,
-    fontSize: 13,
-    fontWeight: "700"
-  },
-  chipTextSelected: {
-    color: colors.text
   }
 });

@@ -1,13 +1,5 @@
-export const colors = {
-  background: "#0F0F0F",
-  card: "#1A1A1A",
-  accent: "#E63946",
-  star: "#E50914",
-  text: "#F5F5F5",
-  muted: "#A7A7A7",
-  border: "#2A2A2A",
-  success: "#51CF66"
-};
+export type { ColorScheme, ThemeMode } from "./theme/colorSchemes";
+export { colors, getActiveThemeColors, setActiveThemeColors } from "./theme/activeColors";
 
 export const spacing = {
   xs: 4,
@@ -18,3 +10,4 @@ export const spacing = {
 };
 
 export const posterBaseUrl = "https://image.tmdb.org/t/p/w500";
+export const backdropBaseUrl = "https://image.tmdb.org/t/p/w780";

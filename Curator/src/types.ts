@@ -69,6 +69,16 @@ export type TmdbSearchResult = {
   title: string;
   year: string;
   poster_path: string | null;
+  overview?: string | null;
+};
+
+export type TmdbTitleDetail = TmdbSearchResult & {
+  backdrop_path: string | null;
+  runtime_minutes: number | null;
+  tagline: string | null;
+  director: string | null;
+  vote_average: number | null;
+  trailer_key: string | null;
 };
 
 export type AggregateFeedItem = {
