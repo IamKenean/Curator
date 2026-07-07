@@ -1,12 +1,25 @@
 import { Ionicons } from "@expo/vector-icons";
 import { useFocusEffect, useRouter } from "expo-router";
-import { useCallback, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { Alert, Image, Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
-import { useSafeAreaInsets } from "react-native-safe-area-context";
+import { ContentSubTabs } from "../../src/components/ContentSubTabs";
 import { EmptyState } from "../../src/components/EmptyState";
+import { CreateListModal } from "../../src/components/lists/CreateListModal";
+import { ListsPanel } from "../../src/components/lists/ListsPanel";
 import { Screen } from "../../src/components/Screen";
 import { SettingsModal } from "../../src/components/SettingsModal";
+import { TabTopBar, TabTopBarSide } from "../../src/components/TabTopBar";
 import { UserAvatar } from "../../src/components/UserAvatar";
+import {
+  createCuratorList,
+  deleteCuratorList,
+  getUserLists,
+  hydrateListEntries,
+  setListVisibility,
+  updateCuratorList,
+  type CreateCuratorListInput,
+  type CuratorList
+} from "../../src/lib/curatorLists";
 import { formatStarRating, trustScoreToPercent } from "../../src/lib/ratings";
 import { getRecommendationStats, getSentRecommendations, getTrustScores } from "../../src/lib/recommendations";
 import { useAuth } from "../../src/providers/AuthProvider";
@@ -15,7 +28,7 @@ import type { ColorScheme } from "../../src/theme";
 import { posterBaseUrl, spacing } from "../../src/theme";
 import type { RatedRecommendation, TrustScore } from "../../src/types";
 
-const PROFILE_SUB_TABS = ["Profile", "Diary", "Lists", "Watchlist"] as const;
+const PROFILE_SUB_TABS = ["Profile", "Reviews", "Lists", "Journal"] as const;
 const RECENT_PUT_ONS_LIMIT = 8;
 const POSTER_WIDTH = 72;
 const AVATAR_SIZE = 72;
@@ -126,7 +139,6 @@ function TasteSimilarityPlaceholder({ styles, successColor }: { styles: ProfileS
 
 export default function ProfileScreen() {
   const router = useRouter();
-  const insets = useSafeAreaInsets();
   const { user, profile, signOut } = useAuth();
   const { colors } = useTheme();
   const styles = useMemo(() => createProfileStyles(colors), [colors]);
@@ -135,8 +147,11 @@ export default function ProfileScreen() {
   const [responsesCount, setResponsesCount] = useState(0);
   const [trustScores, setTrustScores] = useState<TrustScore[]>([]);
   const [recentPutOns, setRecentPutOns] = useState<RatedRecommendation[]>([]);
+  const [lists, setLists] = useState<CuratorList[]>([]);
   const [activeSubTab, setActiveSubTab] = useState<(typeof PROFILE_SUB_TABS)[number]>("Profile");
   const [settingsOpen, setSettingsOpen] = useState(false);
+  const [listFormOpen, setListFormOpen] = useState(false);
+  const [editingList, setEditingList] = useState<CuratorList | null>(null);
 
   const load = useCallback(async () => {
     if (!user) {
@@ -144,20 +159,26 @@ export default function ProfileScreen() {
     }
 
     try {
-      const [stats, scores, sentRecs] = await Promise.all([
+      const [stats, scores, sentRecs, userLists] = await Promise.all([
         getRecommendationStats(user.id),
         getTrustScores(user.id),
-        getSentRecommendations(user.id)
+        getSentRecommendations(user.id),
+        getUserLists(user.id)
       ]);
       setSent(stats.sent);
       setRated(stats.rated);
       setResponsesCount(stats.responses);
       setTrustScores(scores);
       setRecentPutOns(sentRecs.slice(0, RECENT_PUT_ONS_LIMIT));
+      setLists(await Promise.all(userLists.map((list) => hydrateListEntries(list))));
     } catch (error) {
       Alert.alert("Could not load profile", (error as Error).message);
     }
   }, [user]);
+
+  useEffect(() => {
+    void load();
+  }, [load]);
 
   useFocusEffect(
     useCallback(() => {
@@ -166,12 +187,78 @@ export default function ProfileScreen() {
   );
 
   function handleSubTab(tab: (typeof PROFILE_SUB_TABS)[number]) {
-    if (tab === "Profile") {
-      setActiveSubTab("Profile");
+    setActiveSubTab(tab);
+  }
+
+  async function handleSaveList(input: CreateCuratorListInput) {
+    if (!user) {
       return;
     }
 
-    Alert.alert("Coming soon", `${tab} is under development.`);
+    try {
+      if (editingList) {
+        await updateCuratorList(user.id, editingList.id, input);
+      } else {
+        await createCuratorList(user.id, input);
+      }
+      setEditingList(null);
+      await load();
+    } catch (error) {
+      Alert.alert(editingList ? "Could not save list" : "Could not create list", (error as Error).message);
+      throw error;
+    }
+  }
+
+  function openCreateList() {
+    setEditingList(null);
+    setListFormOpen(true);
+  }
+
+  function openList(listId: string) {
+    router.push({ pathname: "/list/[id]", params: { id: listId } });
+  }
+
+  function handleListLongPress(list: CuratorList) {
+    if (!user || list.owner_id !== user.id) {
+      return;
+    }
+
+    Alert.alert(list.name, "Hold actions", [
+      {
+        text: "Edit list",
+        onPress: () => {
+          setEditingList(list);
+          setListFormOpen(true);
+        }
+      },
+      {
+        text: list.visibility === "public" ? "Make friends only" : "Make public",
+        onPress: () => {
+          void setListVisibility(user.id, list.id, list.visibility === "public" ? "friends" : "public")
+            .then(() => load())
+            .catch((error: Error) => Alert.alert("Could not update visibility", error.message));
+        }
+      },
+      {
+        text: "Delete list",
+        style: "destructive",
+        onPress: () => {
+          Alert.alert("Delete list?", "This cannot be undone.", [
+            { text: "Cancel", style: "cancel" },
+            {
+              text: "Delete",
+              style: "destructive",
+              onPress: () => {
+                void deleteCuratorList(user.id, list.id)
+                  .then(() => load())
+                  .catch((error: Error) => Alert.alert("Could not delete list", error.message));
+              }
+            }
+          ]);
+        }
+      },
+      { text: "Cancel", style: "cancel" }
+    ]);
   }
 
   function showComingSoon(feature: string) {
@@ -179,37 +266,45 @@ export default function ProfileScreen() {
   }
 
   const displayName = profile?.username ?? "curator";
+  const headerTitle =
+    activeSubTab === "Lists" ? `${displayName}'s lists` : displayName;
 
   return (
     <>
       <Screen fill edges={["left", "right"]} contentContainerStyle={styles.screenContent}>
-        <View style={[styles.topBar, { paddingTop: insets.top + spacing.xs }]}>
-          <Pressable hitSlop={8} onPress={() => setSettingsOpen(true)} style={styles.topBarSide}>
-            <Ionicons name="settings-outline" size={22} color={colors.text} />
-          </Pressable>
-          <Text style={styles.topBarTitle} numberOfLines={1}>
-            {displayName}
-          </Text>
-          <Pressable hitSlop={8} onPress={() => showComingSoon("Menu")} style={styles.topBarSide}>
-            <Ionicons name="ellipsis-horizontal" size={22} color={colors.text} />
-          </Pressable>
-        </View>
+        <TabTopBar
+          title={headerTitle}
+          left={<TabTopBarSide icon="settings-outline" onPress={() => setSettingsOpen(true)} />}
+          right={
+            activeSubTab === "Lists" ? (
+              <TabTopBarSide icon="add" onPress={openCreateList} />
+            ) : (
+              <TabTopBarSide icon="ellipsis-horizontal" onPress={() => showComingSoon("Menu")} />
+            )
+          }
+        />
 
-        <View style={styles.subTabRow}>
-          {PROFILE_SUB_TABS.map((tab) => {
-            const selected = activeSubTab === tab;
-            return (
-              <Pressable
-                key={tab}
-                onPress={() => handleSubTab(tab)}
-                style={[styles.subTab, selected && styles.subTabSelected]}
-              >
-                <Text style={[styles.subTabText, selected && styles.subTabTextSelected]}>{tab}</Text>
-              </Pressable>
-            );
-          })}
-        </View>
+        <ContentSubTabs tabs={PROFILE_SUB_TABS} activeTab={activeSubTab} onTabPress={handleSubTab} />
 
+        {activeSubTab === "Lists" ? (
+          <View style={styles.mainContent}>
+            <ListsPanel
+              lists={lists}
+              currentUserId={user?.id}
+              emptyTitle="No lists yet"
+              emptyBody="Tap + to create your first curated list. Hold a list to edit or change visibility."
+              onListPress={(list) => openList(list.id)}
+              onListLongPress={handleListLongPress}
+            />
+          </View>
+        ) : activeSubTab === "Reviews" || activeSubTab === "Journal" ? (
+          <View style={styles.mainContent}>
+            <EmptyState
+              title={`${activeSubTab} coming soon`}
+              body="This tab will mirror the home feed once reviews and journal entries ship."
+            />
+          </View>
+        ) : (
         <View style={styles.mainContent}>
           <View style={styles.profileCard}>
             <View style={styles.profileHeader}>
@@ -221,7 +316,12 @@ export default function ProfileScreen() {
               </View>
               <View style={styles.profileMain}>
                 <View style={styles.identityCol}>
-                  <Text style={styles.username} numberOfLines={1}>
+                  <Text
+                    style={styles.username}
+                    numberOfLines={1}
+                    adjustsFontSizeToFit
+                    minimumFontScale={0.65}
+                  >
                     {displayName}
                   </Text>
                   <Text style={styles.bio}>No bio yet</Text>
@@ -254,7 +354,14 @@ export default function ProfileScreen() {
                   {trustScores.map((score) => (
                     <View key={`${score.user_id}-${score.friend_id}`} style={styles.scoreItemBox}>
                       <View style={styles.scoreCopy}>
-                        <Text style={styles.friend}>@{score.friend?.username ?? "Unknown"}</Text>
+                        <Text
+                          style={styles.friend}
+                          numberOfLines={1}
+                          adjustsFontSizeToFit
+                          minimumFontScale={0.75}
+                        >
+                          @{score.friend?.username ?? "Unknown"}
+                        </Text>
                         <Text style={styles.scoreMeta}>{score.total_recs} predictions rated</Text>
                       </View>
                       <Text style={styles.percent}>{trustScoreToPercent(score.score)}%</Text>
@@ -303,7 +410,18 @@ export default function ProfileScreen() {
             </View>
           </View>
         </View>
+        )}
       </Screen>
+
+      <CreateListModal
+        visible={listFormOpen}
+        list={editingList}
+        onClose={() => {
+          setListFormOpen(false);
+          setEditingList(null);
+        }}
+        onSubmit={handleSaveList}
+      />
 
       <SettingsModal
         visible={settingsOpen}
@@ -314,13 +432,10 @@ export default function ProfileScreen() {
   );
 }
 
-function accentTint(accent: string) {
-  return `${accent}2E`;
-}
-
 function createProfileStyles(colors: ColorScheme) {
   return StyleSheet.create({
     screenContent: {
+      flexGrow: 1,
       gap: spacing.sm,
       paddingBottom: spacing.md,
       paddingHorizontal: spacing.sm,
@@ -329,49 +444,6 @@ function createProfileStyles(colors: ColorScheme) {
     mainContent: {
       flexGrow: 1,
       gap: spacing.sm
-    },
-    topBar: {
-      alignItems: "center",
-      flexDirection: "row",
-      justifyContent: "space-between",
-      marginBottom: spacing.xs
-    },
-    topBarSide: {
-      alignItems: "center",
-      height: 32,
-      justifyContent: "center",
-      width: 32
-    },
-    topBarTitle: {
-      color: colors.text,
-      flex: 1,
-      fontSize: 18,
-      fontWeight: "800",
-      textAlign: "center"
-    },
-    subTabRow: {
-      alignItems: "center",
-      flexDirection: "row",
-      flexWrap: "wrap",
-      gap: spacing.sm,
-      justifyContent: "center",
-      paddingBottom: spacing.xs
-    },
-    subTab: {
-      borderRadius: 999,
-      paddingHorizontal: spacing.md,
-      paddingVertical: spacing.sm
-    },
-    subTabSelected: {
-      backgroundColor: accentTint(colors.accent)
-    },
-    subTabText: {
-      color: colors.muted,
-      fontSize: 14,
-      fontWeight: "700"
-    },
-    subTabTextSelected: {
-      color: colors.accent
     },
     profileCard: {
       backgroundColor: colors.card,
@@ -409,6 +481,7 @@ function createProfileStyles(colors: ColorScheme) {
       minWidth: 0
     },
     identityCol: {
+      flex: 1,
       flexShrink: 1,
       gap: 2,
       justifyContent: "center",
@@ -416,16 +489,15 @@ function createProfileStyles(colors: ColorScheme) {
     },
     statsSlot: {
       alignItems: "center",
-      flex: 1,
-      justifyContent: "center",
-      minWidth: 0
+      flexShrink: 0,
+      justifyContent: "center"
     },
     username: {
       color: colors.text,
-      flexShrink: 1,
       fontSize: 20,
       fontWeight: "800",
-      lineHeight: 24
+      lineHeight: 24,
+      minWidth: 0
     },
     bio: {
       color: colors.muted,
@@ -502,7 +574,8 @@ function createProfileStyles(colors: ColorScheme) {
     friend: {
       color: colors.text,
       fontSize: 16,
-      fontWeight: "800"
+      fontWeight: "800",
+      minWidth: 0
     },
     scoreMeta: {
       color: colors.muted,

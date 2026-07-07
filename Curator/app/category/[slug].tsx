@@ -18,7 +18,9 @@ import {
 import { formatComparison, formatStarRating } from "../../src/lib/ratings";
 import { markRecommendationWatchedAndRate } from "../../src/lib/recommendations";
 import { useAuth } from "../../src/providers/AuthProvider";
-import { colors, spacing } from "../../src/theme";
+import { useTheme } from "../../src/providers/ThemeProvider";
+import type { ColorScheme } from "../../src/theme";
+import { spacing } from "../../src/theme";
 import type { Recommendation, TmdbSearchResult } from "../../src/types";
 
 const NUM_COLUMNS = 4;
@@ -30,6 +32,8 @@ const CELL_WIDTH = (SCREEN_WIDTH - H_PADDING * 2 - GRID_GAP * (NUM_COLUMNS - 1))
 export default function CategoryScreen() {
   const { slug } = useLocalSearchParams<{ slug: string }>();
   const { user } = useAuth();
+  const { colors } = useTheme();
+  const styles = useMemo(() => createStyles(colors), [colors]);
   const [items, setItems] = useState<BookshelfItem[]>([]);
   const [loading, setLoading] = useState(false);
   const [sortBy, setSortBy] = useState<CategorySortOption | null>(null);
@@ -110,14 +114,14 @@ export default function CategoryScreen() {
 
   if (!config) {
     return (
-      <Screen>
+      <Screen edges={["left", "right", "bottom"]} contentContainerStyle={styles.screenContent}>
         <EmptyState title="Unknown category" body="Go back and try again." />
       </Screen>
     );
   }
 
   return (
-    <Screen scroll={false}>
+    <Screen scroll={false} fill edges={["left", "right", "bottom"]} contentContainerStyle={styles.screenContent}>
       <Stack.Screen options={{ title: config.title }} />
       <View style={styles.wrap}>
         <View style={styles.sortSection}>
@@ -133,8 +137,6 @@ export default function CategoryScreen() {
             ))}
           </SortChipRow>
         </View>
-
-        {loading ? <Text style={styles.muted}>Loading...</Text> : null}
 
         {!loading && sortedItems.length === 0 ? (
           <EmptyState title="Nothing here yet" body="Check back when there's more activity." />
@@ -190,7 +192,14 @@ export default function CategoryScreen() {
   );
 }
 
-const styles = StyleSheet.create({
+function createStyles(colors: ColorScheme) {
+  return StyleSheet.create({
+  screenContent: {
+    paddingTop: spacing.sm,
+    paddingHorizontal: H_PADDING,
+    paddingBottom: spacing.lg,
+    gap: spacing.md
+  },
   wrap: {
     flex: 1,
     gap: spacing.md
@@ -217,8 +226,6 @@ const styles = StyleSheet.create({
   },
   cell: {
     width: CELL_WIDTH
-  },
-  muted: {
-    color: colors.muted
   }
-});
+  });
+}

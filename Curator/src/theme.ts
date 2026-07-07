@@ -1,6 +1,5 @@
-export { defaultColors as colors } from "./theme/colorSchemes";
 export type { ColorScheme, ThemeMode } from "./theme/colorSchemes";
-export { palette, paletteSwatches, superDarkColors } from "./theme/colorSchemes";
+export { colors, getActiveThemeColors, setActiveThemeColors } from "./theme/activeColors";
 
 export const spacing = {
   xs: 4,
@@ -11,3 +10,4 @@ export const spacing = {
 };
 
 export const posterBaseUrl = "https://image.tmdb.org/t/p/w500";
+export const backdropBaseUrl = "https://image.tmdb.org/t/p/w780";

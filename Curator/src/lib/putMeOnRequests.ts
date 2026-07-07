@@ -1,5 +1,6 @@
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import type { MediaType, TmdbSearchResult, UserProfile } from "../types";
+import { supabase } from "./supabase";
 import { getTmdbTitle } from "./tmdb";
 
 export const PUT_ME_ON_GENRES = [
@@ -182,6 +183,66 @@ export function toPutMeOnRequest(
   };
 }
 
+type DbPutMeOnResponse = {
+  id: string;
+  request_id: string;
+  from_user_id: string;
+  tmdb_id: number;
+  media_type: MediaType;
+  created_at: string;
+};
+
+type DbPutMeOnRequest = {
+  id: string;
+  owner_id: string;
+  prompt: string;
+  audience: PutMeOnAudience;
+  friend_ids: string[];
+  genres: string[];
+  example_films: TmdbSearchResult[];
+  created_at: string;
+  expires_at: string;
+  put_me_on_responses?: DbPutMeOnResponse[];
+};
+
+function isMockUserId(userId: string) {
+  return userId.startsWith("mock-");
+}
+
+function isMissingTable(error: { message: string }, table: string) {
+  const message = error.message.toLowerCase();
+  const tableName = table.toLowerCase();
+  return (
+    message.includes(tableName) &&
+    (message.includes("does not exist") || message.includes("could not find"))
+  );
+}
+
+function setupError() {
+  return "Run supabase/put-me-on.sql in Supabase SQL Editor to enable Put Me On requests.";
+}
+
+function mapDbRequest(row: DbPutMeOnRequest): StoredPutMeOnRequest {
+  return {
+    id: row.id,
+    owner_id: row.owner_id,
+    prompt: row.prompt,
+    created_at: row.created_at,
+    expires_at: row.expires_at,
+    audience: row.audience,
+    friend_ids: row.friend_ids ?? [],
+    genres: row.genres ?? [],
+    example_films: row.example_films ?? [],
+    responses: (row.put_me_on_responses ?? []).map((response) => ({
+      id: response.id,
+      tmdb_id: response.tmdb_id,
+      media_type: response.media_type,
+      from_user_id: response.from_user_id,
+      created_at: response.created_at
+    }))
+  };
+}
+
 async function readUserRequests(userId: string): Promise<StoredPutMeOnRequest[]> {
   const raw = await AsyncStorage.getItem(requestStorageKey(userId));
   if (!raw) {
@@ -218,8 +279,61 @@ function isActive(request: StoredPutMeOnRequest) {
   return new Date(request.expires_at).getTime() > Date.now();
 }
 
+async function fetchSupabaseRequestsForOwner(ownerId: string): Promise<StoredPutMeOnRequest[]> {
+  const { data, error } = await supabase
+    .from("put_me_on_requests")
+    .select("*, put_me_on_responses(*)")
+    .eq("owner_id", ownerId)
+    .gt("expires_at", new Date().toISOString())
+    .order("created_at", { ascending: false });
+
+  if (error) {
+    if (isMissingTable(error, "put_me_on_requests")) {
+      return [];
+    }
+    throw error;
+  }
+
+  return (data ?? []).map((row) => mapDbRequest(row as DbPutMeOnRequest));
+}
+
+export async function isPutMeOnBackendReady(): Promise<boolean> {
+  const { error } = await supabase.from("put_me_on_requests").select("id").limit(1);
+  if (error) {
+    if (isMissingTable(error, "put_me_on_requests")) {
+      return false;
+    }
+    throw error;
+  }
+
+  return true;
+}
+
+export async function fetchVisibleOpenPutMeOnRequests(
+  currentUserId: string
+): Promise<StoredPutMeOnRequest[]> {
+  const { data, error } = await supabase
+    .from("put_me_on_requests")
+    .select("*, put_me_on_responses(*)")
+    .neq("owner_id", currentUserId)
+    .gt("expires_at", new Date().toISOString())
+    .order("created_at", { ascending: false });
+
+  if (error) {
+    if (isMissingTable(error, "put_me_on_requests")) {
+      return [];
+    }
+    throw error;
+  }
+
+  return hydrateRequests((data ?? []).map((row) => mapDbRequest(row as DbPutMeOnRequest)));
+}
+
 export async function getUserPutMeOnRequests(userId: string): Promise<StoredPutMeOnRequest[]> {
-  const requests = (await readUserRequests(userId)).filter(isActive);
+  const requests = isMockUserId(userId)
+    ? (await readUserRequests(userId)).filter(isActive)
+    : await fetchSupabaseRequestsForOwner(userId);
+
   return hydrateRequests(requests);
 }
 
@@ -236,36 +350,82 @@ export async function createPutMeOnRequest(
     throw new Error("Select at least one friend, or choose All friends.");
   }
 
-  const existing = (await readUserRequests(userId)).filter(isActive);
-  if (existing.length >= MAX_USER_PUT_ME_ON_REQUESTS) {
-    throw new Error(`You can only have ${MAX_USER_PUT_ME_ON_REQUESTS} active requests at a time.`);
-  }
-
   const now = new Date();
   const expires = new Date(now);
   expires.setDate(expires.getDate() + PUT_ME_ON_REQUEST_DAYS);
 
-  const created: StoredPutMeOnRequest = {
-    id: `req-${userId}-${now.getTime()}`,
-    owner_id: userId,
-    prompt: trimmed,
-    created_at: now.toISOString(),
-    expires_at: expires.toISOString(),
-    responses: [],
-    audience: input.audience,
-    friend_ids: input.audience === "selected" ? input.friendIds : [],
-    genres: input.genres,
-    example_films: input.exampleFilms.slice(0, MAX_PUT_ME_ON_EXAMPLE_FILMS)
-  };
+  if (isMockUserId(userId)) {
+    const existing = (await readUserRequests(userId)).filter(isActive);
+    if (existing.length >= MAX_USER_PUT_ME_ON_REQUESTS) {
+      throw new Error(`You can only have ${MAX_USER_PUT_ME_ON_REQUESTS} active requests at a time.`);
+    }
 
-  await writeUserRequests(userId, [...existing, created]);
-  return created;
+    const created: StoredPutMeOnRequest = {
+      id: `req-${userId}-${now.getTime()}`,
+      owner_id: userId,
+      prompt: trimmed,
+      created_at: now.toISOString(),
+      expires_at: expires.toISOString(),
+      responses: [],
+      audience: input.audience,
+      friend_ids: input.audience === "selected" ? input.friendIds : [],
+      genres: input.genres,
+      example_films: input.exampleFilms.slice(0, MAX_PUT_ME_ON_EXAMPLE_FILMS)
+    };
+
+    await writeUserRequests(userId, [...existing, created]);
+    return created;
+  }
+
+  const active = await fetchSupabaseRequestsForOwner(userId);
+  if (active.length >= MAX_USER_PUT_ME_ON_REQUESTS) {
+    throw new Error(`You can only have ${MAX_USER_PUT_ME_ON_REQUESTS} active requests at a time.`);
+  }
+
+  const { data, error } = await supabase
+    .from("put_me_on_requests")
+    .insert({
+      owner_id: userId,
+      prompt: trimmed,
+      audience: input.audience,
+      friend_ids: input.audience === "selected" ? input.friendIds : [],
+      genres: input.genres,
+      example_films: input.exampleFilms.slice(0, MAX_PUT_ME_ON_EXAMPLE_FILMS),
+      expires_at: expires.toISOString()
+    })
+    .select("*, put_me_on_responses(*)")
+    .single();
+
+  if (error) {
+    if (isMissingTable(error, "put_me_on_requests")) {
+      throw new Error(setupError());
+    }
+    throw error;
+  }
+
+  return mapDbRequest(data as DbPutMeOnRequest);
 }
 
 export async function deletePutMeOnRequest(userId: string, requestId: string) {
-  const existing = await readUserRequests(userId);
-  const next = existing.filter((request) => request.id !== requestId);
-  await writeUserRequests(userId, next);
+  if (isMockUserId(userId)) {
+    const existing = await readUserRequests(userId);
+    const next = existing.filter((request) => request.id !== requestId);
+    await writeUserRequests(userId, next);
+    return;
+  }
+
+  const { error } = await supabase
+    .from("put_me_on_requests")
+    .delete()
+    .eq("id", requestId)
+    .eq("owner_id", userId);
+
+  if (error) {
+    if (isMissingTable(error, "put_me_on_requests")) {
+      throw new Error(setupError());
+    }
+    throw error;
+  }
 }
 
 export async function addPutMeOnResponse(
@@ -274,28 +434,45 @@ export async function addPutMeOnResponse(
   fromUserId: string,
   tmdb: TmdbSearchResult
 ) {
-  const existing = await readUserRequests(requestOwnerId);
-  const index = existing.findIndex((request) => request.id === requestId);
-  if (index < 0) {
+  if (isMockUserId(requestOwnerId)) {
+    const existing = await readUserRequests(requestOwnerId);
+    const index = existing.findIndex((request) => request.id === requestId);
+    if (index < 0) {
+      return;
+    }
+
+    const request = existing[index];
+    const response: PutMeOnResponse = {
+      id: `resp-${Date.now()}`,
+      tmdb_id: tmdb.id,
+      media_type: tmdb.media_type,
+      from_user_id: fromUserId,
+      created_at: new Date().toISOString(),
+      tmdb
+    };
+
+    existing[index] = {
+      ...request,
+      responses: [response, ...request.responses]
+    };
+
+    await writeUserRequests(requestOwnerId, existing);
     return;
   }
 
-  const request = existing[index];
-  const response: PutMeOnResponse = {
-    id: `resp-${Date.now()}`,
-    tmdb_id: tmdb.id,
-    media_type: tmdb.media_type,
+  const { error } = await supabase.from("put_me_on_responses").insert({
+    request_id: requestId,
     from_user_id: fromUserId,
-    created_at: new Date().toISOString(),
-    tmdb
-  };
+    tmdb_id: tmdb.id,
+    media_type: tmdb.media_type
+  });
 
-  existing[index] = {
-    ...request,
-    responses: [response, ...request.responses]
-  };
-
-  await writeUserRequests(requestOwnerId, existing);
+  if (error) {
+    if (isMissingTable(error, "put_me_on_responses")) {
+      throw new Error(setupError());
+    }
+    throw error;
+  }
 }
 
 export async function seedMockPutMeOnRequests(
@@ -343,7 +520,29 @@ export async function findPutMeOnRequest(
   ownerId: string,
   requestId: string
 ): Promise<StoredPutMeOnRequest | null> {
-  const requests = await readUserRequests(ownerId);
-  const match = requests.find((request) => request.id === requestId);
-  return match ? hydrateResponses(match) : null;
+  if (isMockUserId(ownerId)) {
+    const requests = await readUserRequests(ownerId);
+    const match = requests.find((request) => request.id === requestId);
+    return match ? hydrateResponses(match) : null;
+  }
+
+  const { data, error } = await supabase
+    .from("put_me_on_requests")
+    .select("*, put_me_on_responses(*)")
+    .eq("id", requestId)
+    .eq("owner_id", ownerId)
+    .maybeSingle();
+
+  if (error) {
+    if (isMissingTable(error, "put_me_on_requests")) {
+      return null;
+    }
+    throw error;
+  }
+
+  if (!data) {
+    return null;
+  }
+
+  return hydrateResponses(mapDbRequest(data as DbPutMeOnRequest));
 }

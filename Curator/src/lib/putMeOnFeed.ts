@@ -1,9 +1,11 @@
 import type { UserProfile } from "../types";
+import { supabase } from "./supabase";
 import { getDiscoveryTitlePool } from "./tmdb";
 import {
+  fetchVisibleOpenPutMeOnRequests,
   getUserPutMeOnRequests,
+  isPutMeOnBackendReady,
   isPutMeOnRequestVisibleToViewer,
-  seedMockPutMeOnRequests,
   toActivePutMeOnRequest,
   toPutMeOnRequest,
   type ActivePutMeOnRequest,
@@ -33,6 +35,7 @@ export type PutMeOnFeed = {
   openRequests: PutMeOnRequest[];
   gauntlet: GenreGauntlet;
   leaderboard: LeaderboardEntry[];
+  backendReady: boolean;
 };
 
 export type PutMeOnSort = "newest" | "most_responses" | "ending_soon";
@@ -44,12 +47,6 @@ const MOCK_USERS: UserProfile[] = [
   { id: "mock-jake", username: "Jake Morrison", avatar_url: null, created_at: "2026-01-01T00:00:00Z" }
 ];
 
-const MOCK_BY_ID = new Map(MOCK_USERS.map((user) => [user.id, user]));
-
-export function isMockPutMeOnUser(userId: string) {
-  return userId.startsWith("mock-");
-}
-
 function pick(pool: import("../types").TmdbSearchResult[], start: number, count: number) {
   const picks: import("../types").TmdbSearchResult[] = [];
   for (let index = 0; index < count; index += 1) {
@@ -58,51 +55,44 @@ function pick(pool: import("../types").TmdbSearchResult[], start: number, count:
   return picks;
 }
 
-async function ensureMockRequests(pool: import("../types").TmdbSearchResult[]) {
-  await seedMockPutMeOnRequests(
-    "mock-chris",
-    "A funny movie, not stupid funny.",
-    pick(pool, 4, 5),
-    ["mock-maya", "mock-jordan", "mock-jake"],
-    { genres: ["Comedy"], exampleFilms: pick(pool, 20, 2) }
-  );
-  await seedMockPutMeOnRequests(
-    "mock-maya",
-    "Something that feels like a fever dream.",
-    pick(pool, 8, 4),
-    ["mock-chris", "mock-jordan"],
-    { genres: ["Drama", "Indie"], exampleFilms: pick(pool, 22, 2) }
-  );
-  await seedMockPutMeOnRequests(
-    "mock-jordan",
-    "Slow burn where nothing happens but you're still on edge.",
-    pick(pool, 12, 5),
-    ["mock-chris", "mock-maya", "mock-jake"],
-    { genres: ["Thriller", "Drama"], exampleFilms: pick(pool, 24, 2) }
-  );
-}
-
 export async function getPutMeOnFeed(currentUserId: string, friends: UserProfile[]): Promise<PutMeOnFeed> {
   const pool = await getDiscoveryTitlePool();
-  await ensureMockRequests(pool);
+  const backendReady = await isPutMeOnBackendReady();
 
   const yourStored = await getUserPutMeOnRequests(currentUserId);
   const yourRequests = yourStored.map(toActivePutMeOnRequest);
 
-  const friendIds = new Set(friends.map((friend) => friend.id));
-  const openOwners = [...MOCK_USERS, ...friends].filter(
-    (user) => user.id !== currentUserId && (MOCK_BY_ID.has(user.id) || friendIds.has(user.id))
-  );
-
+  const ownersById = new Map(friends.map((friend) => [friend.id, friend]));
   const openRequests: PutMeOnRequest[] = [];
-  for (const owner of openOwners) {
-    const stored = await getUserPutMeOnRequests(owner.id);
-    for (const request of stored) {
-      if (!MOCK_BY_ID.has(owner.id) && !isPutMeOnRequestVisibleToViewer(request, currentUserId)) {
+
+  if (backendReady) {
+    const friendOpenStored = await fetchVisibleOpenPutMeOnRequests(currentUserId);
+    const missingOwnerIds = [
+      ...new Set(friendOpenStored.map((request) => request.owner_id).filter((ownerId) => !ownersById.has(ownerId)))
+    ];
+
+    if (missingOwnerIds.length > 0) {
+      const { data: users, error } = await supabase.from("users").select("*").in("id", missingOwnerIds);
+      if (error) {
+        throw error;
+      }
+
+      for (const user of users ?? []) {
+        ownersById.set(user.id, user as UserProfile);
+      }
+    }
+
+    for (const request of friendOpenStored) {
+      if (!isPutMeOnRequestVisibleToViewer(request, currentUserId)) {
         continue;
       }
 
-      openRequests.push(toPutMeOnRequest(request, owner, { isMock: MOCK_BY_ID.has(owner.id) }));
+      const owner = ownersById.get(request.owner_id);
+      if (!owner) {
+        continue;
+      }
+
+      openRequests.push(toPutMeOnRequest(request, owner));
     }
   }
 
@@ -111,6 +101,7 @@ export async function getPutMeOnFeed(currentUserId: string, friends: UserProfile
   return {
     yourRequests,
     openRequests,
+    backendReady,
     gauntlet: {
       id: "gauntlet-horror",
       label: "Genre Gauntlet",

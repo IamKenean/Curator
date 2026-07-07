@@ -1,5 +1,5 @@
 import { env } from "./env";
-import type { MediaType, TmdbSearchResult } from "../types";
+import type { MediaType, TmdbSearchResult, TmdbTitleDetail } from "../types";
 
 const baseUrl = "https://api.themoviedb.org/3";
 
@@ -11,6 +11,26 @@ type RawTmdbResult = {
   release_date?: string;
   first_air_date?: string;
   poster_path: string | null;
+  backdrop_path?: string | null;
+  overview?: string | null;
+  tagline?: string | null;
+  runtime?: number | null;
+  episode_run_time?: number[];
+  vote_average?: number | null;
+};
+
+type RawCredits = {
+  crew?: { job: string; name: string }[];
+};
+
+type RawVideos = {
+  results?: { site: string; type: string; key: string }[];
+};
+
+type RawDetailResponse = RawTmdbResult & {
+  credits?: RawCredits;
+  videos?: RawVideos;
+  created_by?: { name: string }[];
 };
 
 function normalizeResult(item: RawTmdbResult): TmdbSearchResult | null {
@@ -30,7 +50,8 @@ function normalizeResult(item: RawTmdbResult): TmdbSearchResult | null {
     media_type: item.media_type as MediaType,
     title,
     year: date ? date.slice(0, 4) : "Unknown",
-    poster_path: item.poster_path
+    poster_path: item.poster_path,
+    overview: item.overview ?? null
   };
 }
 
@@ -73,9 +94,65 @@ export async function getTmdbTitle(tmdbId: number, mediaType: MediaType): Promis
       media_type: mediaType,
       title: "Unknown title",
       year: "Unknown",
-      poster_path: null
+      poster_path: null,
+      overview: null
     }
   );
+}
+
+function directorFromDetail(item: RawDetailResponse, mediaType: MediaType): string | null {
+  const crewDirector = item.credits?.crew?.find((person) => person.job === "Director")?.name;
+  if (crewDirector) {
+    return crewDirector;
+  }
+
+  if (mediaType === "tv") {
+    return item.created_by?.[0]?.name ?? null;
+  }
+
+  return null;
+}
+
+function runtimeFromDetail(item: RawDetailResponse, mediaType: MediaType): number | null {
+  if (mediaType === "movie") {
+    return item.runtime ?? null;
+  }
+
+  const episodeRuntime = item.episode_run_time?.find((value) => value > 0);
+  return episodeRuntime ?? null;
+}
+
+function trailerKeyFromDetail(item: RawDetailResponse): string | null {
+  const trailer = item.videos?.results?.find(
+    (video) => video.site === "YouTube" && (video.type === "Trailer" || video.type === "Teaser")
+  );
+  return trailer?.key ?? null;
+}
+
+export async function getTmdbTitleDetail(tmdbId: number, mediaType: MediaType): Promise<TmdbTitleDetail> {
+  const item = await tmdbFetch<RawDetailResponse>(`/${mediaType}/${tmdbId}`, {
+    append_to_response: "credits,videos"
+  });
+
+  const base =
+    normalizeResult({ ...item, media_type: mediaType }) ?? {
+      id: tmdbId,
+      media_type: mediaType,
+      title: "Unknown title",
+      year: "Unknown",
+      poster_path: null,
+      overview: null
+    };
+
+  return {
+    ...base,
+    backdrop_path: item.backdrop_path ?? null,
+    runtime_minutes: runtimeFromDetail(item, mediaType),
+    tagline: item.tagline ?? null,
+    director: directorFromDetail(item, mediaType),
+    vote_average: item.vote_average ?? null,
+    trailer_key: trailerKeyFromDetail(item)
+  };
 }
 
 export async function getTrendingThisWeek(): Promise<TmdbSearchResult[]> {
