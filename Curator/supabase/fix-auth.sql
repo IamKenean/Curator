@@ -6,11 +6,26 @@ returns trigger
 language plpgsql
 security definer set search_path = public
 as $$
+declare
+  base_username text;
+  final_username text;
+  suffix integer := 0;
 begin
+  base_username := coalesce(
+    new.raw_user_meta_data->>'username',
+    split_part(new.email, '@', 1)
+  );
+  final_username := base_username;
+
+  while exists (select 1 from public.users where username = final_username) loop
+    suffix := suffix + 1;
+    final_username := base_username || suffix::text;
+  end loop;
+
   insert into public.users (id, username, avatar_url, created_at)
   values (
     new.id,
-    coalesce(new.raw_user_meta_data->>'username', split_part(new.email, '@', 1)),
+    final_username,
     null,
     now()
   )

@@ -25,7 +25,8 @@ create table if not exists public.put_me_on_responses (
   from_user_id uuid not null references public.users(id) on delete cascade,
   tmdb_id integer not null,
   media_type text not null check (media_type in ('movie', 'tv')),
-  created_at timestamptz not null default now()
+  created_at timestamptz not null default now(),
+  constraint put_me_on_responses_unique_pick unique (request_id, from_user_id, tmdb_id, media_type)
 );
 
 create index if not exists put_me_on_responses_request_idx
@@ -33,22 +34,6 @@ create index if not exists put_me_on_responses_request_idx
 
 alter table public.put_me_on_requests enable row level security;
 alter table public.put_me_on_responses enable row level security;
-
-create or replace function public.is_friend_of(viewer uuid, other uuid)
-returns boolean
-language sql
-stable
-as $$
-  select viewer = other or exists (
-    select 1
-    from public.friendships f
-    where f.status = 'accepted'
-      and (
-        (f.user_id = viewer and f.friend_id = other)
-        or (f.friend_id = viewer and f.user_id = other)
-      )
-  );
-$$;
 
 create or replace function public.can_view_put_me_on_request(viewer uuid, request public.put_me_on_requests)
 returns boolean

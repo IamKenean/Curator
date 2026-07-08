@@ -21,32 +21,15 @@ create table if not exists public.rec_of_week_votes (
   id uuid primary key default gen_random_uuid(),
   voter_id uuid not null references public.users(id) on delete cascade,
   submission_id uuid not null references public.rec_of_week_submissions(id) on delete cascade,
-  week_start date not null,
   created_at timestamptz not null default now(),
-  constraint rec_of_week_votes_one_per_week unique (voter_id, week_start)
+  constraint rec_of_week_votes_one_per_submission unique (voter_id, submission_id)
 );
 
-create index if not exists rec_of_week_votes_week_idx
-  on public.rec_of_week_votes (week_start, submission_id);
+create index if not exists rec_of_week_votes_submission_idx
+  on public.rec_of_week_votes (submission_id, created_at desc);
 
 alter table public.rec_of_week_submissions enable row level security;
 alter table public.rec_of_week_votes enable row level security;
-
-create or replace function public.is_friend_of(viewer uuid, other uuid)
-returns boolean
-language sql
-stable
-as $$
-  select viewer = other or exists (
-    select 1
-    from public.friendships f
-    where f.status = 'accepted'
-      and (
-        (f.user_id = viewer and f.friend_id = other)
-        or (f.friend_id = viewer and f.user_id = other)
-      )
-  );
-$$;
 
 drop policy if exists "Rec of week submissions readable" on public.rec_of_week_submissions;
 create policy "Rec of week submissions readable"

@@ -44,7 +44,7 @@ create table if not exists public.ratings (
 create table if not exists public.trust_scores (
   user_id uuid not null references public.users(id) on delete cascade,
   friend_id uuid not null references public.users(id) on delete cascade,
-  score numeric(3,1) not null default 0, -- average prediction accuracy (0.0-1.0)
+  score numeric(3,1) not null default 0 check (score >= 0 and score <= 1), -- average prediction accuracy (0.0-1.0)
   total_recs integer not null default 0,
   updated_at timestamptz not null default now(),
   primary key (user_id, friend_id)
@@ -58,16 +58,48 @@ create index if not exists recommendations_from_idx on public.recommendations (f
 create index if not exists ratings_user_idx on public.ratings (user_id, rated_at desc);
 create index if not exists trust_scores_user_score_idx on public.trust_scores (user_id, score desc);
 
+create or replace function public.is_friend_of(viewer uuid, other uuid)
+returns boolean
+language sql
+stable
+security definer set search_path = public
+as $$
+  select viewer = other or exists (
+    select 1
+    from public.friendships f
+    where f.status = 'accepted'
+      and (
+        (f.user_id = viewer and f.friend_id = other)
+        or (f.friend_id = viewer and f.user_id = other)
+      )
+  );
+$$;
+
 create or replace function public.handle_new_user()
 returns trigger
 language plpgsql
 security definer set search_path = public
 as $$
+declare
+  base_username text;
+  final_username text;
+  suffix integer := 0;
 begin
+  base_username := coalesce(
+    new.raw_user_meta_data->>'username',
+    split_part(new.email, '@', 1)
+  );
+  final_username := base_username;
+
+  while exists (select 1 from public.users where username = final_username) loop
+    suffix := suffix + 1;
+    final_username := base_username || suffix::text;
+  end loop;
+
   insert into public.users (id, username, avatar_url, created_at)
   values (
     new.id,
-    coalesce(new.raw_user_meta_data->>'username', split_part(new.email, '@', 1)),
+    final_username,
     null,
     now()
   )
@@ -185,3 +217,32 @@ create policy "Users can update their own trust scores"
   to authenticated
   using (auth.uid() = user_id)
   with check (auth.uid() = user_id);
+
+-- Recipients of recommendations may only change the status column.
+create or replace function public.recommendations_restrict_update()
+returns trigger
+language plpgsql
+security definer set search_path = public
+as $$
+begin
+  if auth.uid() <> old.from_user_id then
+    if new.from_user_id is distinct from old.from_user_id
+       or new.to_user_id is distinct from old.to_user_id
+       or new.tmdb_id is distinct from old.tmdb_id
+       or new.media_type is distinct from old.media_type
+       or new.reason is distinct from old.reason
+       or new.estimated_rating is distinct from old.estimated_rating
+       or new.sender_rating is distinct from old.sender_rating
+       or new.created_at is distinct from old.created_at
+    then
+      raise exception 'Recipients can only update the status of a recommendation';
+    end if;
+  end if;
+  return new;
+end;
+$$;
+
+drop trigger if exists recommendations_restrict_update_trigger on public.recommendations;
+create trigger recommendations_restrict_update_trigger
+  before update on public.recommendations
+  for each row execute procedure public.recommendations_restrict_update();
