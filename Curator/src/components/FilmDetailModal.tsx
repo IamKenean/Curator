@@ -1,4 +1,5 @@
 import { Ionicons } from "@expo/vector-icons";
+import { LinearGradient } from "expo-linear-gradient";
 import { useEffect, useMemo, useState } from "react";
 import {
   ActivityIndicator,
@@ -15,10 +16,14 @@ import {
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { getTmdbTitleDetail } from "../lib/tmdb";
+import { getTitleRating, saveTitleRating } from "../lib/titleRatings";
+import { addToWatchlist, isInWatchlist, removeFromWatchlist } from "../lib/watchlist";
+import { useAuth } from "../providers/AuthProvider";
 import { useTheme } from "../providers/ThemeProvider";
 import type { ColorScheme } from "../theme/colorSchemes";
 import { backdropBaseUrl, posterBaseUrl, spacing } from "../theme";
 import type { MediaType, TmdbSearchResult, TmdbTitleDetail } from "../types";
+import { QuickRatingModal } from "./QuickRatingModal";
 
 const HERO_HEIGHT = Math.round(Dimensions.get("window").height * 0.46);
 const POSTER_WIDTH = 128;
@@ -27,10 +32,6 @@ const POSTER_OVERHANG = 56;
 const POSTER_RIGHT = spacing.xl + 10;
 const TITLE_POSTER_ANCHOR = POSTER_HEIGHT * (2 / 12);
 const FOOTER_HEIGHT = 58;
-const FADE_STEPS = Array.from({ length: 14 }, (_, index) => {
-  const progress = index / 13;
-  return progress * progress;
-});
 
 type FilmDetailModalProps = {
   visible: boolean;
@@ -56,24 +57,32 @@ function tmdbStars(voteAverage: number | null) {
 
 function BannerFade({ backgroundColor }: { backgroundColor: string }) {
   return (
-    <View pointerEvents="none" style={styles.fadeContainer}>
-      {FADE_STEPS.map((opacity) => (
-        <View key={opacity} style={[styles.fadeStep, { backgroundColor, opacity }]} />
-      ))}
-    </View>
+    <LinearGradient
+      colors={["transparent", backgroundColor]}
+      locations={[0.15, 1]}
+      pointerEvents="none"
+      style={styles.fadeContainer}
+    />
   );
 }
 
 export function FilmDetailModal({ visible, title, onClose }: FilmDetailModalProps) {
   const insets = useSafeAreaInsets();
+  const { user } = useAuth();
   const { colors } = useTheme();
   const styles = useMemo(() => createStyles(colors), [colors]);
   const [detail, setDetail] = useState<TmdbTitleDetail | null>(null);
   const [loading, setLoading] = useState(false);
+  const [ratingOpen, setRatingOpen] = useState(false);
+  const [savedRating, setSavedRating] = useState(0);
+  const [onWatchlist, setOnWatchlist] = useState(false);
+  const [watchlistBusy, setWatchlistBusy] = useState(false);
 
   useEffect(() => {
     if (!visible || !title) {
       setDetail(null);
+      setSavedRating(0);
+      setOnWatchlist(false);
       return;
     }
 
@@ -98,10 +107,22 @@ export function FilmDetailModal({ visible, title, onClose }: FilmDetailModalProp
         }
       });
 
+    if (user) {
+      void Promise.all([
+        getTitleRating(user.id, title.id, title.media_type),
+        isInWatchlist(user.id, title)
+      ]).then(([rating, watchlisted]) => {
+        if (!cancelled) {
+          setSavedRating(rating?.rating_value ?? 0);
+          setOnWatchlist(watchlisted);
+        }
+      });
+    }
+
     return () => {
       cancelled = true;
     };
-  }, [onClose, title, visible]);
+  }, [onClose, title, user, visible]);
 
   const display = detail ?? title;
   const backdropUri =
@@ -123,8 +144,36 @@ export function FilmDetailModal({ visible, title, onClose }: FilmDetailModalProp
     await Linking.openURL(url);
   }
 
-  function showComingSoon(feature: string) {
-    Alert.alert("Coming soon", `${feature} is under development.`);
+  async function handleWatchlistPress() {
+    if (!user || !display) {
+      Alert.alert("Sign in required", "Sign in to save titles to your watchlist.");
+      return;
+    }
+
+    setWatchlistBusy(true);
+    try {
+      if (onWatchlist) {
+        await removeFromWatchlist(user.id, display);
+        setOnWatchlist(false);
+      } else {
+        await addToWatchlist(user.id, display);
+        setOnWatchlist(true);
+      }
+    } catch (error) {
+      Alert.alert("Watchlist error", (error as Error).message);
+    } finally {
+      setWatchlistBusy(false);
+    }
+  }
+
+  async function handleQuickRating(input: { stars: number; isFavorite: boolean }) {
+    if (!user || !display) {
+      Alert.alert("Sign in required", "Sign in to rate titles.");
+      return;
+    }
+
+    const saved = await saveTitleRating(user.id, display, input);
+    setSavedRating(saved.rating_value);
   }
 
   if (!display) {
@@ -149,7 +198,7 @@ export function FilmDetailModal({ visible, title, onClose }: FilmDetailModalProp
           showsVerticalScrollIndicator={false}
           contentContainerStyle={[
             styles.scrollContent,
-            { paddingBottom: FOOTER_HEIGHT + insets.bottom + spacing.xl }
+            { paddingBottom: FOOTER_HEIGHT + insets.bottom + spacing.xl * 2 }
           ]}
         >
           <View style={styles.hero}>
@@ -173,7 +222,7 @@ export function FilmDetailModal({ visible, title, onClose }: FilmDetailModalProp
             </Pressable>
             <Pressable
               hitSlop={12}
-              onPress={() => showComingSoon("More options")}
+              onPress={() => Alert.alert("Coming soon", "More options is under development.")}
               style={[styles.iconButton, styles.iconButtonRight, { top: insets.top + spacing.sm }]}
             >
               <Ionicons name="ellipsis-horizontal" size={18} color={colors.text} />
@@ -227,7 +276,7 @@ export function FilmDetailModal({ visible, title, onClose }: FilmDetailModalProp
                   <Text style={styles.ratingValue}>{ratingLabel ?? "—"}</Text>
                   <View style={styles.starRow}>
                     {[0, 1, 2, 3, 4].map((index) => (
-                      <Ionicons key={index} name="star" size={10} color={colors.success} />
+                      <Ionicons key={index} name="star" size={12} color={colors.success} />
                     ))}
                   </View>
                   <Text style={styles.ratingSource}>TMDB average</Text>
@@ -238,15 +287,27 @@ export function FilmDetailModal({ visible, title, onClose }: FilmDetailModalProp
         </ScrollView>
 
         <View style={[styles.footerBar, { paddingBottom: insets.bottom + spacing.sm }]}>
-          <Pressable onPress={() => showComingSoon("Watchlist")} style={styles.secondaryAction}>
-            <Ionicons name="add" size={14} color={colors.text} />
-            <Text style={styles.secondaryActionText}>Watchlist</Text>
+          <Pressable
+            disabled={watchlistBusy}
+            onPress={() => void handleWatchlistPress()}
+            style={[styles.secondaryAction, onWatchlist && styles.secondaryActionActive]}
+          >
+            <Ionicons name={onWatchlist ? "checkmark" : "add"} size={14} color={colors.text} />
+            <Text style={styles.secondaryActionText}>{onWatchlist ? "In Watchlist" : "Watchlist"}</Text>
           </Pressable>
-          <Pressable onPress={() => showComingSoon("Rate / Review")} style={styles.primaryAction}>
+          <Pressable onPress={() => setRatingOpen(true)} style={styles.primaryAction}>
             <Ionicons name="star-outline" size={14} color={colors.accent} />
-            <Text style={styles.primaryActionText}>Rate / Review</Text>
+            <Text style={styles.primaryActionText}>{savedRating ? "Update rating" : "Rate / Review"}</Text>
           </Pressable>
         </View>
+
+        <QuickRatingModal
+          initialStars={savedRating}
+          tmdb={display}
+          visible={ratingOpen}
+          onClose={() => setRatingOpen(false)}
+          onSubmit={handleQuickRating}
+        />
       </View>
     </Modal>
   );
@@ -259,9 +320,6 @@ const styles = StyleSheet.create({
     left: 0,
     position: "absolute",
     right: 0
-  },
-  fadeStep: {
-    flex: 1
   }
 });
 
@@ -317,17 +375,17 @@ function createStyles(colors: ColorScheme) {
     },
     title: {
       color: colors.text,
-      fontSize: 20,
+      fontSize: 23,
       fontWeight: "800",
       letterSpacing: -0.3,
-      lineHeight: 24
+      lineHeight: 27
     },
     creditHeading: {
       color: colors.muted,
       fontSize: 8,
       fontWeight: "700",
       letterSpacing: 0.8,
-      marginTop: spacing.xs
+      marginTop: spacing.sm + 2
     },
     directorName: {
       color: colors.text,
@@ -359,9 +417,9 @@ function createStyles(colors: ColorScheme) {
       marginTop: spacing.sm
     },
     body: {
-      gap: spacing.md,
+      gap: spacing.lg,
       paddingHorizontal: spacing.lg,
-      paddingTop: POSTER_OVERHANG + spacing.lg
+      paddingTop: POSTER_OVERHANG + spacing.xl + spacing.md
     },
     trailerButton: {
       alignItems: "center",
@@ -392,24 +450,25 @@ function createStyles(colors: ColorScheme) {
     },
     tagline: {
       color: colors.muted,
-      fontSize: 9,
+      fontSize: 11,
       fontWeight: "800",
-      letterSpacing: 0.7
+      letterSpacing: 0.8,
+      marginTop: spacing.xs
     },
     overview: {
       color: colors.text,
-      fontSize: 11,
-      lineHeight: 17
+      fontSize: 13,
+      lineHeight: 20
     },
     ratingsBlock: {
-      gap: spacing.sm,
-      paddingTop: spacing.xs
+      gap: spacing.md,
+      paddingTop: spacing.sm
     },
     sectionLabel: {
       color: colors.muted,
-      fontSize: 9,
+      fontSize: 10,
       fontWeight: "800",
-      letterSpacing: 0.7
+      letterSpacing: 0.8
     },
     ratingsRow: {
       alignItems: "flex-end",
@@ -422,7 +481,7 @@ function createStyles(colors: ColorScheme) {
       flex: 1,
       flexDirection: "row",
       gap: 3,
-      height: 52
+      height: 58
     },
     histogramBar: {
       backgroundColor: colors.border,
@@ -437,9 +496,9 @@ function createStyles(colors: ColorScheme) {
     },
     ratingValue: {
       color: colors.text,
-      fontSize: 18,
+      fontSize: 20,
       fontWeight: "900",
-      lineHeight: 20
+      lineHeight: 22
     },
     starRow: {
       flexDirection: "row",
@@ -447,7 +506,7 @@ function createStyles(colors: ColorScheme) {
     },
     ratingSource: {
       color: colors.muted,
-      fontSize: 9,
+      fontSize: 10,
       fontWeight: "700"
     },
     footerBar: {
@@ -475,6 +534,9 @@ function createStyles(colors: ColorScheme) {
       justifyContent: "center",
       minHeight: 42,
       paddingHorizontal: spacing.sm
+    },
+    secondaryActionActive: {
+      borderColor: colors.success,
     },
     secondaryActionText: {
       color: colors.text,
