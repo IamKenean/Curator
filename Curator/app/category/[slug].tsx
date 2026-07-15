@@ -3,6 +3,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { Alert, Dimensions, FlatList, Pressable, StyleSheet, Text, View } from "react-native";
 import { BookshelfPoster } from "../../src/components/BookshelfPoster";
 import { EmptyState } from "../../src/components/EmptyState";
+import { FilmDetailModal, filmTargetFromItem } from "../../src/components/FilmDetailModal";
 import { RatingModal } from "../../src/components/RatingModal";
 import { RecommendationActionModal } from "../../src/components/RecommendationActionModal";
 import { Screen } from "../../src/components/Screen";
@@ -15,9 +16,11 @@ import {
   type BookshelfItem,
   type CategorySortOption
 } from "../../src/lib/homeCategories";
-import { formatComparison, formatStarRating } from "../../src/lib/ratings";
+import { formatComparison } from "../../src/lib/ratings";
+import { buildCalibrationAlertMessage } from "../../src/lib/calibrationEvents";
 import { markRecommendationWatchedAndRate } from "../../src/lib/recommendations";
 import { useAuth } from "../../src/providers/AuthProvider";
+import { useMockData } from "../../src/providers/MockDataProvider";
 import { useTheme } from "../../src/providers/ThemeProvider";
 import type { ColorScheme } from "../../src/theme";
 import { spacing } from "../../src/theme";
@@ -32,6 +35,7 @@ const CELL_WIDTH = (SCREEN_WIDTH - H_PADDING * 2 - GRID_GAP * (NUM_COLUMNS - 1))
 export default function CategoryScreen() {
   const { slug } = useLocalSearchParams<{ slug: string }>();
   const { user } = useAuth();
+  const { revision } = useMockData();
   const { colors } = useTheme();
   const styles = useMemo(() => createStyles(colors), [colors]);
   const [items, setItems] = useState<BookshelfItem[]>([]);
@@ -41,6 +45,7 @@ export default function CategoryScreen() {
     (Recommendation & { tmdb?: TmdbSearchResult }) | null
   >(null);
   const [ratingTarget, setRatingTarget] = useState<(Recommendation & { tmdb?: TmdbSearchResult }) | null>(null);
+  const [filmDetailTarget, setFilmDetailTarget] = useState<TmdbSearchResult | null>(null);
 
   const categorySlug = slug && isHomeCategorySlug(slug) ? slug : null;
   const config = categorySlug ? HOME_CATEGORIES[categorySlug] : null;
@@ -65,7 +70,7 @@ export default function CategoryScreen() {
     } finally {
       setLoading(false);
     }
-  }, [config, user]);
+  }, [config, revision, user]);
 
   useFocusEffect(
     useCallback(() => {
@@ -92,7 +97,7 @@ export default function CategoryScreen() {
       return;
     }
 
-    await markRecommendationWatchedAndRate({
+    const summary = await markRecommendationWatchedAndRate({
       recommendation: ratingTarget,
       currentUserId: user.id,
       stars: input.stars,
@@ -101,15 +106,21 @@ export default function CategoryScreen() {
     });
 
     const comparison = formatComparison(ratingTarget.estimated_rating, input.stars);
-    if (comparison) {
+    const hadEstimate = ratingTarget.estimated_rating != null && ratingTarget.estimated_rating > 0;
+    if (comparison || summary || !hadEstimate) {
       Alert.alert(
         "Review sent",
-        `Estimate: ${formatStarRating(comparison.estimated)} ★\nYour rating: ${formatStarRating(comparison.actual)} ★\n${comparison.diffText}`
+        buildCalibrationAlertMessage({ comparison, summary, hadEstimate })
       );
     }
 
     setRatingTarget(null);
     await load();
+  }
+
+  function closeRecommendationSheet() {
+    setSelectedRecommendation(null);
+    setFilmDetailTarget(null);
   }
 
   if (!config) {
@@ -168,17 +179,28 @@ export default function CategoryScreen() {
       </View>
 
       <RecommendationActionModal
-        visible={Boolean(selectedRecommendation)}
+        visible={Boolean(selectedRecommendation) && !filmDetailTarget}
         recommendation={selectedRecommendation}
         tmdb={selectedRecommendation?.tmdb}
-        onClose={() => setSelectedRecommendation(null)}
-        onWatchLater={() => setSelectedRecommendation(null)}
+        onClose={closeRecommendationSheet}
+        onWatchLater={closeRecommendationSheet}
         onMarkWatched={() => {
           if (selectedRecommendation) {
             setRatingTarget(selectedRecommendation);
           }
           setSelectedRecommendation(null);
         }}
+        onPosterPress={() => {
+          if (selectedRecommendation) {
+            setFilmDetailTarget(filmTargetFromItem(selectedRecommendation));
+          }
+        }}
+      />
+
+      <FilmDetailModal
+        visible={Boolean(filmDetailTarget)}
+        title={filmDetailTarget}
+        onClose={() => setFilmDetailTarget(null)}
       />
 
       <RatingModal

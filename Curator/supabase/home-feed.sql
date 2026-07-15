@@ -81,18 +81,44 @@ security definer
 set search_path = public
 as $$
   select
-    r.tmdb_id,
-    r.media_type,
-    rt.rating_value,
-    rt.rated_at,
-    u.id as user_id,
-    u.username,
-    u.avatar_url
-  from public.ratings rt
-  join public.recommendations r on r.id = rt.recommendation_id
-  join public.users u on u.id = rt.user_id
-  where rt.user_id in (select public.viewer_friend_ids(p_user_id))
-  order by rt.rated_at desc
+    activity.tmdb_id,
+    activity.media_type,
+    activity.rating_value,
+    activity.rated_at,
+    activity.user_id,
+    activity.username,
+    activity.avatar_url
+  from (
+    select
+      r.tmdb_id,
+      r.media_type,
+      rt.rating_value,
+      rt.rated_at,
+      u.id as user_id,
+      u.username,
+      u.avatar_url
+    from public.ratings rt
+    join public.recommendations r on r.id = rt.recommendation_id
+    join public.users u on u.id = rt.user_id
+    where rt.user_id in (select public.viewer_friend_ids(p_user_id))
+
+    union all
+
+    select
+      r.tmdb_id,
+      r.media_type,
+      coalesce(r.estimated_rating, 0) as rating_value,
+      r.created_at as rated_at,
+      u.id as user_id,
+      u.username,
+      u.avatar_url
+    from public.recommendations r
+    join public.users u on u.id = r.from_user_id
+    where r.from_user_id in (select public.viewer_friend_ids(p_user_id))
+      and r.to_user_id = p_user_id
+      and r.status = 'pending'
+  ) activity
+  order by activity.rated_at desc
   limit 20;
 $$;
 
@@ -120,16 +146,36 @@ as $$
     limit 5
   ),
   recent_picks as (
-    select distinct on (rt.user_id)
-      rt.user_id,
-      r.tmdb_id,
-      r.media_type,
-      rt.rating_value,
-      rt.rated_at
-    from public.ratings rt
-    join public.recommendations r on r.id = rt.recommendation_id
-    where rt.user_id in (select friend_id from top_friends)
-    order by rt.user_id, rt.rated_at desc
+    select distinct on (source.user_id)
+      source.user_id,
+      source.tmdb_id,
+      source.media_type,
+      source.rating_value,
+      source.rated_at
+    from (
+      select
+        rt.user_id,
+        r.tmdb_id,
+        r.media_type,
+        rt.rating_value,
+        rt.rated_at
+      from public.ratings rt
+      join public.recommendations r on r.id = rt.recommendation_id
+      where rt.user_id in (select friend_id from top_friends)
+
+      union all
+
+      select
+        r.from_user_id as user_id,
+        r.tmdb_id,
+        r.media_type,
+        coalesce(r.estimated_rating, 0) as rating_value,
+        r.created_at as rated_at
+      from public.recommendations r
+      where r.from_user_id in (select friend_id from top_friends)
+        and r.to_user_id = p_user_id
+    ) source
+    order by source.user_id, source.rated_at desc
   )
   select
     tf.friend_id,
@@ -144,7 +190,7 @@ as $$
   join public.users u on u.id = tf.friend_id
   left join recent_picks rp on rp.user_id = tf.friend_id
   where rp.tmdb_id is not null
-  order by tf.trust_score desc;
+  order by tf.trust_score desc, rp.rated_at desc;
 $$;
 
 create or replace function public.get_trusted_recommender_picks()
@@ -243,3 +289,55 @@ grant execute on function public.get_new_from_friends(uuid) to authenticated;
 grant execute on function public.get_high_trust_friends_picks(uuid) to authenticated;
 grant execute on function public.get_trusted_recommender_picks() to authenticated;
 grant execute on function public.get_taste_match_picks(uuid) to authenticated;
+
+create or replace function public.is_home_feed_ready()
+returns boolean
+language sql
+stable
+security definer
+set search_path = public
+as $$
+  select true;
+$$;
+
+create or replace function public.get_home_feed_bundle(p_user_id uuid)
+returns json
+language sql
+stable
+security definer
+set search_path = public
+as $$
+  select json_build_object(
+    'friends_rated_highly', coalesce((
+      select json_agg(row_to_json(section))
+      from get_friends_rated_highly(p_user_id) as section
+    ), '[]'::json),
+    'popular_this_week', coalesce((
+      select json_agg(row_to_json(section))
+      from get_curator_popular_this_week() as section
+    ), '[]'::json),
+    'new_from_friends', coalesce((
+      select json_agg(row_to_json(section))
+      from get_new_from_friends(p_user_id) as section
+    ), '[]'::json),
+    'high_trust_friends', coalesce((
+      select json_agg(row_to_json(section))
+      from get_high_trust_friends_picks(p_user_id) as section
+    ), '[]'::json),
+    'trusted_recommenders', coalesce((
+      select json_agg(row_to_json(section))
+      from get_trusted_recommender_picks() as section
+    ), '[]'::json),
+    'taste_matches', coalesce((
+      select json_agg(row_to_json(section))
+      from get_taste_match_picks(p_user_id) as section
+    ), '[]'::json),
+    'friends_top_10', coalesce((
+      select json_agg(row_to_json(section))
+      from get_friends_top_10_picks(p_user_id) as section
+    ), '[]'::json)
+  );
+$$;
+
+grant execute on function public.is_home_feed_ready() to authenticated;
+grant execute on function public.get_home_feed_bundle(uuid) to authenticated;

@@ -1,33 +1,40 @@
 import { useFocusEffect, useRouter } from "expo-router";
 import { useCallback, useMemo, useState } from "react";
 import { Alert, Dimensions, ScrollView, StyleSheet, View } from "react-native";
+import { AddFriendsBanner, DimmedFeedOverlay } from "../../src/components/AddFriendsBanner";
 import { ContentSubTabs } from "../../src/components/ContentSubTabs";
-import { EmptyState } from "../../src/components/EmptyState";
+import { CalibrationJournalPanel } from "../../src/components/CalibrationJournalPanel";
 import { FilmDetailModal, filmTargetFromItem } from "../../src/components/FilmDetailModal";
 import { FeedTitleCard, TrustFriendCard } from "../../src/components/FeedTitleCard";
+import { HomeFeedSetupBanner } from "../../src/components/HomeFeedSetupBanner";
 import { HomeSection } from "../../src/components/HomeSection";
 import { InboxFilmCard } from "../../src/components/InboxFilmCard";
 import { ListsPanel } from "../../src/components/lists/ListsPanel";
+import { MockDataToggle } from "../../src/components/MockDataToggle";
+import { RankingsPanel } from "../../src/components/rankings/RankingsPanel";
 import { RatingModal } from "../../src/components/RatingModal";
 import { RecommendationActionModal } from "../../src/components/RecommendationActionModal";
 import { Screen } from "../../src/components/Screen";
 import { TabTopBar, TabTopBarSpacer } from "../../src/components/TabTopBar";
 import { getListsFeed, hydrateListEntries, type CuratorList } from "../../src/lib/curatorLists";
 import { formatComparison, formatStarRating } from "../../src/lib/ratings";
-import { getHomeFeed } from "../../src/lib/homeFeed";
+import { buildCalibrationAlertMessage } from "../../src/lib/calibrationEvents";
+import { loadHomeFeed } from "../../src/lib/homeFeed";
 import { getTmdbTitle } from "../../src/lib/tmdb";
 import { getIncomingPendingRecommendations, markRecommendationWatchedAndRate } from "../../src/lib/recommendations";
 import { syncInboxNotifications } from "../../src/lib/notifications";
 import { getFriendships } from "../../src/lib/social";
 import { useAuth } from "../../src/providers/AuthProvider";
+import { useMockData } from "../../src/providers/MockDataProvider";
 import { useTheme } from "../../src/providers/ThemeProvider";
 import type { ColorScheme } from "../../src/theme";
 import { spacing } from "../../src/theme";
+import { formatFriendsTop10Meta } from "../../src/lib/userRankings";
 import type { HomeCategorySlug } from "../../src/lib/homeCategories";
 
 import type { HomeFeed, Recommendation, TmdbSearchResult } from "../../src/types";
 
-const HOME_SUB_TABS = ["Films", "Reviews", "Lists", "Journal"] as const;
+const HOME_SUB_TABS = ["Films", "Rankings", "Lists", "Journal"] as const;
 
 type HydratedRecommendation = Recommendation & {
   tmdb?: TmdbSearchResult;
@@ -42,22 +49,28 @@ const emptyFeed: HomeFeed = {
   newFromFriends: [],
   highTrustFriends: [],
   trustedRecommenders: [],
-  tasteMatches: []
+  tasteMatches: [],
+  friendsTop10: []
 };
 
 export default function HomeScreen() {
   const router = useRouter();
   const { user } = useAuth();
+  const { revision, mockDataEnabled } = useMockData();
   const { colors } = useTheme();
   const styles = useMemo(() => createStyles(colors), [colors]);
   const [inbox, setInbox] = useState<HydratedRecommendation[]>([]);
   const [feed, setFeed] = useState<HomeFeed>(emptyFeed);
   const [memberLists, setMemberLists] = useState<CuratorList[]>([]);
+  const [friendCount, setFriendCount] = useState(0);
+  const [homeFeedBackendReady, setHomeFeedBackendReady] = useState(true);
   const [activeSubTab, setActiveSubTab] = useState<(typeof HOME_SUB_TABS)[number]>("Films");
   const [loading, setLoading] = useState(false);
   const [selectedRecommendation, setSelectedRecommendation] = useState<HydratedRecommendation | null>(null);
   const [ratingTarget, setRatingTarget] = useState<HydratedRecommendation | null>(null);
   const [filmDetailTarget, setFilmDetailTarget] = useState<TmdbSearchResult | null>(null);
+
+  const shouldDimFeed = friendCount === 0 && !mockDataEnabled && !loading;
 
   const load = useCallback(async () => {
     if (!user) {
@@ -71,9 +84,11 @@ export default function HomeScreen() {
         .filter((friendship) => friendship.status === "accepted")
         .map((friendship) => (friendship.user_id === user.id ? friendship.friend_id : friendship.user_id));
 
-      const [recommendations, homeFeed, listsFeed] = await Promise.all([
+      setFriendCount(friendIds.length);
+
+      const [recommendations, homeFeedResult, listsFeed] = await Promise.all([
         getIncomingPendingRecommendations(user.id),
-        getHomeFeed(user.id),
+        loadHomeFeed(user.id),
         getListsFeed(user.id, friendIds)
       ]);
 
@@ -85,7 +100,8 @@ export default function HomeScreen() {
       );
 
       setInbox(hydratedInbox);
-      setFeed(homeFeed);
+      setFeed(homeFeedResult.feed);
+      setHomeFeedBackendReady(homeFeedResult.backendReady);
       setMemberLists(
         await Promise.all(
           listsFeed
@@ -99,7 +115,7 @@ export default function HomeScreen() {
     } finally {
       setLoading(false);
     }
-  }, [user]);
+  }, [user, revision]);
 
   useFocusEffect(
     useCallback(() => {
@@ -112,7 +128,7 @@ export default function HomeScreen() {
       return;
     }
 
-    await markRecommendationWatchedAndRate({
+    const summary = await markRecommendationWatchedAndRate({
       recommendation: ratingTarget,
       currentUserId: user.id,
       stars: input.stars,
@@ -121,10 +137,11 @@ export default function HomeScreen() {
     });
 
     const comparison = formatComparison(ratingTarget.estimated_rating, input.stars);
-    if (comparison) {
+    const hadEstimate = ratingTarget.estimated_rating != null && ratingTarget.estimated_rating > 0;
+    if (comparison || summary || !hadEstimate) {
       Alert.alert(
         "Review sent",
-        `Estimate: ${formatStarRating(comparison.estimated)} ★\nYour rating: ${formatStarRating(comparison.actual)} ★\n${comparison.diffText}`
+        buildCalibrationAlertMessage({ comparison, summary, hadEstimate })
       );
     }
 
@@ -140,23 +157,46 @@ export default function HomeScreen() {
     router.push({ pathname: "/list/[id]", params: { id: listId } });
   }
 
+  function openFriendsTab() {
+    router.push("/(tabs)/friends");
+  }
+
   function openFilmDetail(item: { tmdb_id: number; media_type: TmdbSearchResult["media_type"]; tmdb?: TmdbSearchResult }) {
+    if (shouldDimFeed) {
+      return;
+    }
+
     setFilmDetailTarget(filmTargetFromItem(item));
   }
 
+  function closeRecommendationSheet() {
+    setSelectedRecommendation(null);
+    setFilmDetailTarget(null);
+  }
+
   return (
-    <Screen scroll edges={["left", "right"]} contentContainerStyle={styles.screenContent}>
+    <Screen
+      scroll={activeSubTab !== "Rankings"}
+      fill={activeSubTab === "Rankings"}
+      edges={["left", "right"]}
+      contentContainerStyle={styles.screenContent}
+    >
       <TabTopBar title="Curator" left={<TabTopBarSpacer />} right={<TabTopBarSpacer />} />
 
       <ContentSubTabs tabs={HOME_SUB_TABS} activeTab={activeSubTab} onTabPress={setActiveSubTab} />
 
       {activeSubTab === "Films" ? (
         <>
+      {friendCount === 0 ? <AddFriendsBanner onAddFriends={openFriendsTab} /> : null}
+
+      {!homeFeedBackendReady ? <HomeFeedSetupBanner /> : null}
+
+      <DimmedFeedOverlay dimmed={shouldDimFeed}>
       <HomeSection
         title="Inbox"
         count={inbox.length}
         emptyMessage={!loading ? "Inbox is clear." : undefined}
-        onHeaderPress={() => openCategory("inbox")}
+        onHeaderPress={shouldDimFeed ? undefined : () => openCategory("inbox")}
       >
         {inbox.length > 0 ? (
           <ScrollView
@@ -171,7 +211,7 @@ export default function HomeScreen() {
                   recommendation={item}
                   tmdb={item.tmdb}
                   width={INBOX_CARD_WIDTH}
-                  onPress={() => setSelectedRecommendation(item)}
+                  onPress={shouldDimFeed ? () => {} : () => setSelectedRecommendation(item)}
                 />
               </View>
             ))}
@@ -180,10 +220,31 @@ export default function HomeScreen() {
       </HomeSection>
 
       <HomeSection
+        title="In Friends' Top 10"
+        subtitle="Films your friends hold in their personal canon."
+        emptyMessage="No friends have ranked films yet."
+        onHeaderPress={shouldDimFeed ? undefined : () => openCategory("friends-top-10")}
+        data={feed.friendsTop10}
+        keyExtractor={(item) => `ft10-${item.media_type}-${item.tmdb_id}`}
+        renderItem={(item) => (
+          <FeedTitleCard
+            tmdb={item.tmdb}
+            subtitle={
+              item.friends.length === 1
+                ? "In 1 friend's top 10"
+                : `In ${item.friends.length} friends' top 10`
+            }
+            meta={formatFriendsTop10Meta(item)}
+            onPress={() => openFilmDetail(item)}
+          />
+        )}
+      />
+
+      <HomeSection
         title="Friends Rated Highly"
         subtitle="Loved in your network — not sent to you yet."
         emptyMessage="No high ratings from friends yet."
-        onHeaderPress={() => openCategory("friends-rated-highly")}
+        onHeaderPress={shouldDimFeed ? undefined : () => openCategory("friends-rated-highly")}
         data={feed.friendsRatedHighly}
         keyExtractor={(item) => `frh-${item.media_type}-${item.tmdb_id}`}
         renderItem={(item) => (
@@ -200,7 +261,7 @@ export default function HomeScreen() {
         title="Popular This Week"
         subtitle="Trending on Curator."
         emptyMessage="Nothing trending yet."
-        onHeaderPress={() => openCategory("popular-this-week")}
+        onHeaderPress={shouldDimFeed ? undefined : () => openCategory("popular-this-week")}
         data={feed.popularThisWeek}
         keyExtractor={(item) => `pop-${item.media_type}-${item.tmdb_id}`}
         renderItem={(item) => (
@@ -217,7 +278,7 @@ export default function HomeScreen() {
         title="New From Friends"
         subtitle="Recently watched or rated in your network."
         emptyMessage="No recent friend activity yet."
-        onHeaderPress={() => openCategory("new-from-friends")}
+        onHeaderPress={shouldDimFeed ? undefined : () => openCategory("new-from-friends")}
         data={feed.newFromFriends}
         keyExtractor={(item) => `nff-${item.user_id}-${item.media_type}-${item.tmdb_id}-${item.rated_at}`}
         renderItem={(item) => (
@@ -234,7 +295,7 @@ export default function HomeScreen() {
         title="Friends With High Trust Scores"
         subtitle="Your best taste matches and their latest picks."
         emptyMessage="Rate more recommendations to build trust scores."
-        onHeaderPress={() => openCategory("high-trust-friends")}
+        onHeaderPress={shouldDimFeed ? undefined : () => openCategory("high-trust-friends")}
         data={feed.highTrustFriends}
         keyExtractor={(item) => `htf-${item.friend_id}-${item.media_type}-${item.tmdb_id}`}
         renderItem={(item) => (
@@ -253,7 +314,7 @@ export default function HomeScreen() {
         title="From People With High Trust Scores"
         subtitle="Platform-wide picks from trusted recommenders."
         emptyMessage="Not enough trust data yet."
-        onHeaderPress={() => openCategory("trusted-recommenders")}
+        onHeaderPress={shouldDimFeed ? undefined : () => openCategory("trusted-recommenders")}
         data={feed.trustedRecommenders}
         keyExtractor={(item) => `tr-${item.media_type}-${item.tmdb_id}`}
         renderItem={(item) => (
@@ -270,7 +331,7 @@ export default function HomeScreen() {
         title="From People With Your Taste"
         subtitle="Titles from users whose ratings match yours."
         emptyMessage="Rate a few titles to unlock taste matches."
-        onHeaderPress={() => openCategory("taste-matches")}
+        onHeaderPress={shouldDimFeed ? undefined : () => openCategory("taste-matches")}
         data={feed.tasteMatches}
         keyExtractor={(item) => `taste-${item.media_type}-${item.tmdb_id}`}
         renderItem={(item) => (
@@ -283,6 +344,10 @@ export default function HomeScreen() {
         )}
       />
 
+      </DimmedFeedOverlay>
+
+      <MockDataToggle />
+
         </>
       ) : activeSubTab === "Lists" ? (
         <View style={styles.tabPanel}>
@@ -294,33 +359,48 @@ export default function HomeScreen() {
             onListPress={(list) => openList(list.id)}
           />
         </View>
-      ) : (
+      ) : activeSubTab === "Journal" ? (
         <View style={styles.tabPanel}>
-          <EmptyState
-            title={`${activeSubTab} coming soon`}
-            body="This home tab will mirror the matching profile section once it ships."
+          <CalibrationJournalPanel
+            active={activeSubTab === "Journal"}
+            friendCount={friendCount}
+            onInviteFriends={() => router.push("/(tabs)/friends")}
+            onGoToInbox={() => setActiveSubTab("Films")}
+            onOpenFilm={setFilmDetailTarget}
           />
         </View>
-      )}
-
-      <FilmDetailModal
-        visible={Boolean(filmDetailTarget)}
-        title={filmDetailTarget}
-        onClose={() => setFilmDetailTarget(null)}
-      />
+      ) : activeSubTab === "Rankings" ? (
+        <View style={styles.rankingsPanel}>
+          <RankingsPanel
+            active={activeSubTab === "Rankings"}
+            onGoToInbox={() => setActiveSubTab("Films")}
+          />
+        </View>
+      ) : null}
 
       <RecommendationActionModal
-        visible={Boolean(selectedRecommendation)}
+        visible={Boolean(selectedRecommendation) && !filmDetailTarget}
         recommendation={selectedRecommendation}
         tmdb={selectedRecommendation?.tmdb}
-        onClose={() => setSelectedRecommendation(null)}
-        onWatchLater={() => setSelectedRecommendation(null)}
+        onClose={closeRecommendationSheet}
+        onWatchLater={closeRecommendationSheet}
         onMarkWatched={() => {
           if (selectedRecommendation) {
             setRatingTarget(selectedRecommendation);
           }
           setSelectedRecommendation(null);
         }}
+        onPosterPress={() => {
+          if (selectedRecommendation) {
+            setFilmDetailTarget(filmTargetFromItem(selectedRecommendation));
+          }
+        }}
+      />
+
+      <FilmDetailModal
+        visible={Boolean(filmDetailTarget)}
+        title={filmDetailTarget}
+        onClose={() => setFilmDetailTarget(null)}
       />
 
       <RatingModal
@@ -337,6 +417,7 @@ export default function HomeScreen() {
 function createStyles(colors: ColorScheme) {
   return StyleSheet.create({
     screenContent: {
+      flexGrow: 1,
       gap: spacing.sm,
       paddingBottom: spacing.md,
       paddingHorizontal: spacing.sm,
@@ -345,6 +426,10 @@ function createStyles(colors: ColorScheme) {
     tabPanel: {
       gap: spacing.sm,
       paddingBottom: spacing.md
+    },
+    rankingsPanel: {
+      flex: 1,
+      minHeight: 0
     },
     inboxContent: {
       gap: INBOX_GAP,

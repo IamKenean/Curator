@@ -20,6 +20,40 @@ import type { ColorScheme } from "../../src/theme/colorSchemes";
 import { posterBaseUrl, spacing } from "../../src/theme";
 import type { Friendship, TmdbSearchResult, UserProfile } from "../../src/types";
 
+type SendFocusStep = "friend" | "title" | "ratings" | "send";
+type SendSectionKey = "friend" | "title" | "ratings";
+
+function getSendFocusStep(input: {
+  friendDone: boolean;
+  titleDone: boolean;
+  ratingsDone: boolean;
+}): SendFocusStep {
+  if (!input.friendDone) {
+    return "friend";
+  }
+  if (!input.titleDone) {
+    return "title";
+  }
+  if (!input.ratingsDone) {
+    return "ratings";
+  }
+  return "send";
+}
+
+function getSendSectionState(
+  step: SendSectionKey,
+  focusStep: SendFocusStep,
+  done: boolean
+): "active" | "complete" | "pending" {
+  if (focusStep === step) {
+    return "active";
+  }
+  if (done) {
+    return "complete";
+  }
+  return "pending";
+}
+
 const RECENT_PUT_ONS_LIMIT = 4;
 const RECENT_POSTER_ASPECT = 1.35;
 const RECENT_ROW_GAP = spacing.sm;
@@ -161,6 +195,27 @@ export default function SendScreen() {
   const [requestPrompt, setRequestPrompt] = useState<string | null>(null);
   const [titleLoading, setTitleLoading] = useState(false);
   const [titleSearching, setTitleSearching] = useState(false);
+  const [ratingsEngaged, setRatingsEngaged] = useState(false);
+
+  const friendDone = selectedFriend != null;
+  const titleDone = selectedTitle != null;
+  const ratingsDone = ratingsEngaged;
+  const focusStep = getSendFocusStep({ friendDone, titleDone, ratingsDone });
+  const sendReady = focusStep === "send";
+
+  const friendSectionState = getSendSectionState("friend", focusStep, friendDone);
+  const titleSectionState = getSendSectionState("title", focusStep, titleDone);
+  const ratingsSectionState = getSendSectionState("ratings", focusStep, ratingsDone);
+
+  const handleEstimatedRatingChange = useCallback((value: number) => {
+    setRatingsEngaged(true);
+    setEstimatedRating(value);
+  }, []);
+
+  const handleSenderRatingChange = useCallback((value: number) => {
+    setRatingsEngaged(true);
+    setSenderRating(value);
+  }, []);
 
   const friends = useMemo(() => {
     if (!user) {
@@ -307,6 +362,7 @@ export default function SendScreen() {
       setSelectedTitle(null);
       setEstimatedRating(0);
       setSenderRating(0);
+      setRatingsEngaged(false);
       void loadRecentPutOns();
       Alert.alert(
         "Sent",
@@ -347,7 +403,7 @@ export default function SendScreen() {
       ) : null}
 
       <View style={styles.sections}>
-      <SendSectionCard title="1. Pick a friend" expand flex={1}>
+      <SendSectionCard title="1. Pick a friend" expand flex={1} state={friendSectionState}>
         {friends.length === 0 ? (
           <EmptyState title="No friends yet" body="Accept or add a friend before sending recommendations." />
         ) : (
@@ -361,7 +417,7 @@ export default function SendScreen() {
         )}
       </SendSectionCard>
 
-      <SendSectionCard title="2. Pick a title" expand flex={1.35}>
+      <SendSectionCard title="2. Pick a title" expand flex={1.35} state={titleSectionState}>
         <View style={styles.titleSectionBody}>
           <TmdbSearch
             selected={selectedTitle}
@@ -383,13 +439,13 @@ export default function SendScreen() {
         </View>
       </SendSectionCard>
 
-      <SendSectionCard expand flex={1}>
+      <SendSectionCard title="3. Add your ratings" expand flex={1} state={ratingsSectionState}>
         <View style={styles.ratingsBody}>
           <View style={styles.ratingBlockExpand}>
             <Text style={styles.ratingLabel}>Your estimate for them</Text>
             <StarRatingPicker
               value={estimatedRating}
-              onChange={setEstimatedRating}
+              onChange={handleEstimatedRatingChange}
               showFavorite={false}
               showClear={false}
               sendStyle
@@ -401,7 +457,7 @@ export default function SendScreen() {
             <Text style={styles.ratingLabel}>Your personal rating</Text>
             <StarRatingPicker
               value={senderRating}
-              onChange={setSenderRating}
+              onChange={handleSenderRatingChange}
               showFavorite={false}
               showClear={false}
               sendStyle
@@ -418,9 +474,10 @@ export default function SendScreen() {
           title={sending ? "Sending..." : "Send Recommendation"}
           icon="paper-plane"
           compact
-          disabled={sending}
+          variant={sendReady ? "primary" : "secondary"}
+          disabled={sending || !sendReady}
           onPress={submit}
-          style={styles.sendButton}
+          style={[styles.sendButton, sendReady && styles.sendButtonReady]}
         />
       </View>
     </Screen>
@@ -496,6 +553,12 @@ function createSendStyles(colors: ColorScheme) {
     borderRadius: 10,
     minHeight: 40,
     width: "100%"
+  },
+  sendButtonReady: {
+    shadowColor: colors.accent,
+    shadowOffset: { width: 0, height: 0 },
+    shadowOpacity: 0.45,
+    shadowRadius: 14
   },
   recentSection: {
     gap: spacing.xs,

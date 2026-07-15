@@ -29,6 +29,7 @@ export type CreatePutMeOnRequestInput = {
 
 export const MAX_PUT_ME_ON_EXAMPLE_FILMS = 3;
 export const MAX_USER_PUT_ME_ON_REQUESTS = 2;
+export const MAX_PUT_ME_ON_RESPONSES = 4;
 export const PUT_ME_ON_REQUEST_DAYS = 7;
 const STORAGE_KEY = "curator.putMeOnRequests.v1";
 
@@ -67,9 +68,21 @@ function uniqueRecommenderCount(responses: PutMeOnResponse[]) {
   return new Set(responses.map((response) => response.from_user_id)).size;
 }
 
+export function isPutMeOnRequestOpen(request: StoredPutMeOnRequest) {
+  return new Date(request.expires_at).getTime() > Date.now() && request.responses.length < MAX_PUT_ME_ON_RESPONSES;
+}
+
+function isNotExpired(request: StoredPutMeOnRequest) {
+  return new Date(request.expires_at).getTime() > Date.now();
+}
+
+function isRequestFull(request: StoredPutMeOnRequest) {
+  return request.responses.length >= MAX_PUT_ME_ON_RESPONSES;
+}
+
 function visiblePosters(responses: PutMeOnResponse[]) {
   const posters = responses.map((response) => response.tmdb).filter((item): item is TmdbSearchResult => Boolean(item));
-  const preview = posters.slice(0, 3);
+  const preview = posters.slice(0, MAX_PUT_ME_ON_RESPONSES);
   const extraCount = Math.max(0, posters.length - preview.length);
   return { preview, extraCount };
 }
@@ -78,6 +91,8 @@ export type ActivePutMeOnRequest = {
   id: string;
   prompt: string;
   responseCount: number;
+  filmCount: number;
+  isFull: boolean;
   daysLeft: number;
   hiddenPosters: TmdbSearchResult[];
   extraCount: number;
@@ -91,6 +106,8 @@ export type PutMeOnRequest = {
   user: UserProfile;
   prompt: string;
   responseCount: number;
+  filmCount: number;
+  isFull: boolean;
   hiddenPosters: TmdbSearchResult[];
   extraCount: number;
   isMock?: boolean;
@@ -149,10 +166,15 @@ export function isPutMeOnRequestVisibleToViewer(
 export function toActivePutMeOnRequest(request: StoredPutMeOnRequest): ActivePutMeOnRequest {
   const normalized = normalizeRequest(request);
   const { preview, extraCount } = visiblePosters(normalized.responses);
+  const filmCount = normalized.responses.length;
+  const isFull = isRequestFull(normalized);
+
   return {
     id: normalized.id,
     prompt: normalized.prompt,
     responseCount: uniqueRecommenderCount(normalized.responses),
+    filmCount,
+    isFull,
     daysLeft: daysLeft(normalized.expires_at),
     hiddenPosters: preview,
     extraCount,
@@ -169,11 +191,16 @@ export function toPutMeOnRequest(
 ): PutMeOnRequest {
   const normalized = normalizeRequest(request);
   const { preview, extraCount } = visiblePosters(normalized.responses);
+  const filmCount = normalized.responses.length;
+  const isFull = isRequestFull(normalized);
+
   return {
     id: normalized.id,
     user,
     prompt: normalized.prompt,
     responseCount: uniqueRecommenderCount(normalized.responses),
+    filmCount,
+    isFull,
     hiddenPosters: preview,
     extraCount,
     isMock: options?.isMock,
@@ -276,7 +303,7 @@ async function hydrateRequests(requests: StoredPutMeOnRequest[]) {
 }
 
 function isActive(request: StoredPutMeOnRequest) {
-  return new Date(request.expires_at).getTime() > Date.now();
+  return isNotExpired(request);
 }
 
 async function fetchSupabaseRequestsForOwner(ownerId: string): Promise<StoredPutMeOnRequest[]> {
@@ -326,7 +353,11 @@ export async function fetchVisibleOpenPutMeOnRequests(
     throw error;
   }
 
-  return hydrateRequests((data ?? []).map((row) => mapDbRequest(row as DbPutMeOnRequest)));
+  return hydrateRequests(
+    (data ?? [])
+      .map((row) => mapDbRequest(row as DbPutMeOnRequest))
+      .filter(isPutMeOnRequestOpen)
+  );
 }
 
 export async function getUserPutMeOnRequests(userId: string): Promise<StoredPutMeOnRequest[]> {
@@ -442,6 +473,10 @@ export async function addPutMeOnResponse(
     }
 
     const request = existing[index];
+    if (!isPutMeOnRequestOpen(request)) {
+      throw new Error("This request already has 4 films and is closed.");
+    }
+
     const response: PutMeOnResponse = {
       id: `resp-${Date.now()}`,
       tmdb_id: tmdb.id,
@@ -458,6 +493,15 @@ export async function addPutMeOnResponse(
 
     await writeUserRequests(requestOwnerId, existing);
     return;
+  }
+
+  const request = await findPutMeOnRequest(requestOwnerId, requestId);
+  if (!request) {
+    throw new Error("That Put Me On request could not be found.");
+  }
+
+  if (!isPutMeOnRequestOpen(request)) {
+    throw new Error("This request already has 4 films and is closed.");
   }
 
   const { error } = await supabase.from("put_me_on_responses").insert({

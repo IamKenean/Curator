@@ -1,5 +1,15 @@
 export type MediaType = "movie" | "tv";
 
+export type RankingListType =
+  | "all-time"
+  | "romance"
+  | "sci-fi"
+  | "short-films"
+  | "animated"
+  | "horror"
+  | "comedy"
+  | "documentary";
+
 export type UserProfile = {
   id: string;
   username: string;
@@ -63,6 +73,40 @@ export type TrustScore = {
   friend?: UserProfile;
 };
 
+export type CalibrationEventType = "received" | "sent_response";
+
+export type CalibrationEvent = {
+  id: string;
+  recommendation_id: string;
+  viewer_user_id: string;
+  friend_user_id: string;
+  event_type: CalibrationEventType;
+  tmdb_id: number;
+  media_type: MediaType;
+  estimated_rating: number | null;
+  actual_rating: number;
+  rec_accuracy: number;
+  trust_before: number | null;
+  trust_after: number;
+  trust_delta_percent: number;
+  reason: string | null;
+  notes: string | null;
+  is_favorite: boolean;
+  rated_at: string;
+  created_at: string;
+  friend?: UserProfile;
+  tmdb?: TmdbSearchResult;
+};
+
+export type CalibrationRatingSummary = {
+  recAccuracyLabel: string | null;
+  trustBeforeLabel: string | null;
+  trustAfterLabel: string;
+  trustDeltaLabel: string;
+  trustDeltaTone: "up" | "down" | "flat" | "new";
+  friendUsername: string;
+};
+
 export type TmdbSearchResult = {
   id: number;
   media_type: MediaType;
@@ -81,7 +125,11 @@ export type TmdbTitleDetail = TmdbSearchResult & {
   trailer_key: string | null;
 };
 
-export type AggregateFeedItem = {
+export type MockFeedMarker = {
+  is_mock?: boolean;
+};
+
+export type AggregateFeedItem = MockFeedMarker & {
   tmdb_id: number;
   media_type: MediaType;
   avg_rating?: number;
@@ -90,7 +138,7 @@ export type AggregateFeedItem = {
   tmdb?: TmdbSearchResult;
 };
 
-export type FriendActivityFeedItem = {
+export type FriendActivityFeedItem = MockFeedMarker & {
   tmdb_id: number;
   media_type: MediaType;
   rating_value: number;
@@ -101,7 +149,7 @@ export type FriendActivityFeedItem = {
   tmdb?: TmdbSearchResult;
 };
 
-export type TrustFriendPickItem = {
+export type TrustFriendPickItem = MockFeedMarker & {
   friend_id: string;
   username: string;
   avatar_url: string | null;
@@ -120,4 +168,34 @@ export type HomeFeed = {
   highTrustFriends: TrustFriendPickItem[];
   trustedRecommenders: AggregateFeedItem[];
   tasteMatches: AggregateFeedItem[];
+  friendsTop10: FriendsTop10Pick[];
+};
+
+export type TitleRating = {
+  user_id: string;
+  tmdb_id: number;
+  media_type: MediaType;
+  rating_value: number;
+  is_favorite: boolean;
+  source: "standalone" | "rec" | "import";
+  rated_at: string;
+  tmdb?: TmdbSearchResult;
+};
+
+export type UserRanking = {
+  user_id: string;
+  list_type?: RankingListType;
+  tmdb_id: number;
+  media_type: MediaType;
+  rank_position: number;
+  updated_at: string;
+  rating_value?: number;
+  tmdb?: TmdbSearchResult;
+};
+
+export type FriendsTop10Pick = {
+  tmdb_id: number;
+  media_type: MediaType;
+  friends: { friend_id: string; username: string; avatar_url: string | null; rank_position: number }[];
+  tmdb?: TmdbSearchResult;
 };

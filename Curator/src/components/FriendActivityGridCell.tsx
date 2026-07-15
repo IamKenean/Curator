@@ -1,6 +1,6 @@
 import { Ionicons } from "@expo/vector-icons";
 import { useMemo } from "react";
-import { Image, StyleSheet, Text, View } from "react-native";
+import { Image, Pressable, StyleSheet, Text, View } from "react-native";
 import { formatStarRating } from "../lib/ratings";
 import { useTheme } from "../providers/ThemeProvider";
 import type { ColorScheme } from "../theme";
@@ -11,9 +11,10 @@ import { UserAvatar } from "./UserAvatar";
 type FriendActivityGridCellProps = {
   item: FriendActivityFeedItem;
   width: number;
+  onProfilePress?: () => void;
 };
 
-export function FriendActivityGridCell({ item, width }: FriendActivityGridCellProps) {
+export function FriendActivityGridCell({ item, width, onProfilePress }: FriendActivityGridCellProps) {
   const { colors } = useTheme();
   const styles = useMemo(() => createStyles(colors), [colors]);
   const posterUri = item.tmdb?.poster_path ? `${posterBaseUrl}${item.tmdb.poster_path}` : undefined;
@@ -29,7 +30,12 @@ export function FriendActivityGridCell({ item, width }: FriendActivityGridCellPr
             <Text style={styles.fallbackText}>No Poster</Text>
           </View>
         )}
-        <View style={styles.avatarBadge}>
+        <Pressable
+          disabled={!onProfilePress}
+          hitSlop={4}
+          onPress={onProfilePress}
+          style={styles.avatarBadge}
+        >
           <UserAvatar
             user={{
               id: item.user_id,
@@ -39,11 +45,13 @@ export function FriendActivityGridCell({ item, width }: FriendActivityGridCellPr
             }}
             size={24}
           />
-        </View>
+        </Pressable>
       </View>
-      <Text numberOfLines={1} style={styles.username}>
-        @{item.username}
-      </Text>
+      <Pressable disabled={!onProfilePress} onPress={onProfilePress}>
+        <Text numberOfLines={1} style={styles.username}>
+          @{item.username}
+        </Text>
+      </Pressable>
       <View style={styles.ratingRow}>
         <Ionicons name="star" size={10} color={colors.star} />
         <Text style={styles.rating}>{formatStarRating(Number(item.rating_value))}</Text>

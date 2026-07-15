@@ -176,23 +176,28 @@ export function FilmDetailModal({ visible, title, onClose }: FilmDetailModalProp
     setSavedRating(saved.rating_value);
   }
 
-  if (!display) {
-    return null;
-  }
-
-  const posterUri = display.poster_path ? `${posterBaseUrl}${display.poster_path}` : null;
+  const posterUri = display?.poster_path ? `${posterBaseUrl}${display.poster_path}` : null;
   const runtimeLabel = formatRuntime(detail?.runtime_minutes ?? null);
   const ratingLabel = tmdbStars(detail?.vote_average ?? null);
-  const yearLabel = display.year !== "Unknown" && display.year ? display.year : null;
+  const yearLabel = display && display.year !== "Unknown" && display.year ? display.year : null;
   const directorHeading = detail?.director
     ? [yearLabel, "DIRECTED BY"].filter(Boolean).join(" • ")
     : yearLabel;
 
-  const posterTopInHero = HERO_HEIGHT - POSTER_HEIGHT + POSTER_OVERHANG;
+  const heroHeight = HERO_HEIGHT + insets.top;
+  const posterTopInHero = heroHeight - POSTER_HEIGHT + POSTER_OVERHANG;
   const titleAnchorTop = posterTopInHero + TITLE_POSTER_ANCHOR;
+  const modalVisible = visible && Boolean(title);
 
   return (
-    <Modal animationType="slide" visible={visible} onRequestClose={onClose}>
+    <Modal
+      animationType="slide"
+      presentationStyle="fullScreen"
+      statusBarTranslucent
+      visible={modalVisible}
+      onRequestClose={onClose}
+    >
+      {display ? (
       <View style={styles.root}>
         <ScrollView
           showsVerticalScrollIndicator={false}
@@ -201,17 +206,19 @@ export function FilmDetailModal({ visible, title, onClose }: FilmDetailModalProp
             { paddingBottom: FOOTER_HEIGHT + insets.bottom + spacing.xl * 2 }
           ]}
         >
-          <View style={styles.hero}>
-            {backdropUri ? (
-              <Image source={{ uri: backdropUri }} style={styles.banner} />
-            ) : posterUri ? (
-              <Image source={{ uri: posterUri }} style={styles.banner} blurRadius={10} />
-            ) : (
-              <View style={[styles.banner, styles.bannerFallback]} />
-            )}
+          <View style={[styles.hero, { height: heroHeight }]}>
+            <View style={styles.bannerClip} pointerEvents="none">
+              {backdropUri ? (
+                <Image resizeMode="cover" source={{ uri: backdropUri }} style={styles.banner} />
+              ) : posterUri ? (
+                <Image resizeMode="cover" source={{ uri: posterUri }} style={styles.banner} blurRadius={10} />
+              ) : (
+                <View style={[styles.banner, styles.bannerFallback]} />
+              )}
 
-            <View style={styles.bannerTopShade} pointerEvents="none" />
-            <BannerFade backgroundColor={colors.background} />
+              <View style={styles.bannerTopShade} />
+              <BannerFade backgroundColor={colors.background} />
+            </View>
 
             <Pressable
               hitSlop={12}
@@ -309,6 +316,11 @@ export function FilmDetailModal({ visible, title, onClose }: FilmDetailModalProp
           onSubmit={handleQuickRating}
         />
       </View>
+      ) : (
+        <View style={[styles.root, styles.loadingRoot]}>
+          <ActivityIndicator color={colors.accent} size="large" />
+        </View>
+      )}
     </Modal>
   );
 }
@@ -329,16 +341,22 @@ function createStyles(colors: ColorScheme) {
       backgroundColor: colors.background,
       flex: 1
     },
+    loadingRoot: {
+      alignItems: "center",
+      justifyContent: "center"
+    },
     scrollContent: {
-      paddingTop: spacing.sm
+      flexGrow: 1
     },
     hero: {
-      height: HERO_HEIGHT,
       position: "relative"
     },
+    bannerClip: {
+      ...StyleSheet.absoluteFillObject,
+      overflow: "hidden"
+    },
     banner: {
-      height: "100%",
-      width: "100%"
+      ...StyleSheet.absoluteFillObject
     },
     bannerFallback: {
       backgroundColor: colors.card

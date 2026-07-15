@@ -1,6 +1,16 @@
 import { supabase } from "./supabase";
 import type { Friendship, UserProfile } from "../types";
 
+export async function getUserProfile(userId: string): Promise<UserProfile | null> {
+  const { data, error } = await supabase.from("users").select("*").eq("id", userId).maybeSingle();
+
+  if (error) {
+    throw error;
+  }
+
+  return data;
+}
+
 export async function searchUsers(username: string, currentUserId: string): Promise<UserProfile[]> {
   const trimmed = username.trim();
   if (trimmed.length < 2) {

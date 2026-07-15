@@ -8,6 +8,7 @@ import { FilmDetailModal } from "../../src/components/FilmDetailModal";
 import { CreateListModal } from "../../src/components/lists/CreateListModal";
 import { ListsPanel } from "../../src/components/lists/ListsPanel";
 import { MovieSearchModal } from "../../src/components/MovieSearchModal";
+import { RankingsPanel } from "../../src/components/rankings/RankingsPanel";
 import { Screen } from "../../src/components/Screen";
 import { SettingsModal } from "../../src/components/SettingsModal";
 import { TabTopBar, TabTopBarSide } from "../../src/components/TabTopBar";
@@ -32,7 +33,7 @@ import type { ColorScheme } from "../../src/theme";
 import { posterBaseUrl, spacing } from "../../src/theme";
 import type { RatedRecommendation, TrustScore, TmdbSearchResult } from "../../src/types";
 
-const PROFILE_SUB_TABS = ["Profile", "Reviews", "Lists", "Watchlist"] as const;
+const PROFILE_SUB_TABS = ["Profile", "Rankings", "Lists", "Watchlist"] as const;
 const RECENT_PUT_ONS_LIMIT = 8;
 const POSTER_WIDTH = 72;
 const AVATAR_SIZE = 72;
@@ -315,7 +316,12 @@ export default function ProfileScreen() {
 
   return (
     <>
-      <Screen fill edges={["left", "right"]} contentContainerStyle={styles.screenContent}>
+      <Screen
+        fill
+        scroll={activeSubTab !== "Rankings"}
+        edges={["left", "right"]}
+        contentContainerStyle={styles.screenContent}
+      >
         <TabTopBar
           title={headerTitle}
           left={<TabTopBarSide icon="settings-outline" onPress={() => setSettingsOpen(true)} />}
@@ -351,12 +357,9 @@ export default function ProfileScreen() {
               onItemLongPress={(item) => void handleRemoveFromWatchlist(item)}
             />
           </View>
-        ) : activeSubTab === "Reviews" ? (
-          <View style={styles.mainContent}>
-            <EmptyState
-              title="Reviews coming soon"
-              body="This tab will mirror the home feed once reviews ship."
-            />
+        ) : activeSubTab === "Rankings" ? (
+          <View style={styles.rankingsPanel}>
+            <RankingsPanel active={activeSubTab === "Rankings"} />
           </View>
         ) : (
         <View style={styles.mainContent}>
@@ -418,7 +421,7 @@ export default function ProfileScreen() {
                         </Text>
                         <Text style={styles.scoreMeta}>{score.total_recs} predictions rated</Text>
                       </View>
-                      <Text style={styles.percent}>{trustScoreToPercent(score.score)}%</Text>
+                      <Text style={styles.percent}>{trustScoreToPercent(score.score, 1)}%</Text>
                     </View>
                   ))}
                 </View>
@@ -511,6 +514,10 @@ function createProfileStyles(colors: ColorScheme) {
     mainContent: {
       flexGrow: 1,
       gap: spacing.sm
+    },
+    rankingsPanel: {
+      flex: 1,
+      minHeight: 0
     },
     profileCard: {
       backgroundColor: colors.card,

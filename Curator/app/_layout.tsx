@@ -1,10 +1,14 @@
+import "react-native-gesture-handler";
 import { Stack } from "expo-router";
 import { StatusBar } from "expo-status-bar";
+import { StyleSheet } from "react-native";
+import { GestureHandlerRootView } from "react-native-gesture-handler";
 import { SafeAreaProvider } from "react-native-safe-area-context";
 import { ConfigErrorScreen } from "../src/components/ConfigErrorScreen";
 import { SplashGate } from "../src/components/SplashGate";
 import { getBlockingEnvIssues } from "../src/lib/env";
 import { AuthProvider } from "../src/providers/AuthProvider";
+import { MockDataProvider } from "../src/providers/MockDataProvider";
 import { NotificationProvider } from "../src/providers/NotificationProvider";
 import { ThemeProvider, useTheme } from "../src/providers/ThemeProvider";
 
@@ -29,6 +33,7 @@ function ThemedStack() {
       <Stack.Screen name="responses" options={{ title: "Responses" }} />
       <Stack.Screen name="category/[slug]" options={{ title: "Browse" }} />
       <Stack.Screen name="list/[id]" options={{ title: "List" }} />
+      <Stack.Screen name="user/[id]" options={{ headerShown: false }} />
     </Stack>
   );
 }
@@ -38,25 +43,35 @@ export default function RootLayout() {
 
   if (configIssues.length > 0) {
     return (
-      <>
+      <GestureHandlerRootView style={styles.root}>
         <StatusBar style="light" />
         <ConfigErrorScreen />
-      </>
+      </GestureHandlerRootView>
     );
   }
 
   return (
-    <SafeAreaProvider>
-      <ThemeProvider>
-        <SplashGate>
-          <AuthProvider>
-            <NotificationProvider>
-              <StatusBar style="light" />
-              <ThemedStack />
-            </NotificationProvider>
-          </AuthProvider>
-        </SplashGate>
-      </ThemeProvider>
-    </SafeAreaProvider>
+    <GestureHandlerRootView style={styles.root}>
+      <SafeAreaProvider>
+        <ThemeProvider>
+          <SplashGate>
+            <AuthProvider>
+              <MockDataProvider>
+                <NotificationProvider>
+                  <StatusBar style="light" />
+                  <ThemedStack />
+                </NotificationProvider>
+              </MockDataProvider>
+            </AuthProvider>
+          </SplashGate>
+        </ThemeProvider>
+      </SafeAreaProvider>
+    </GestureHandlerRootView>
   );
 }
+
+const styles = StyleSheet.create({
+  root: {
+    flex: 1
+  }
+});

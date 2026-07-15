@@ -25,12 +25,14 @@ export function RatingModal({ visible, recommendation, tmdb, onClose, onSubmit }
   const [notes, setNotes] = useState("");
   const [isFavorite, setIsFavorite] = useState(false);
   const [submitting, setSubmitting] = useState(false);
+  const [showDetails, setShowDetails] = useState(false);
 
   useEffect(() => {
     if (visible) {
       setStars(0);
       setNotes("");
       setIsFavorite(false);
+      setShowDetails(false);
     }
   }, [visible, recommendation?.id]);
 
@@ -45,6 +47,7 @@ export function RatingModal({ visible, recommendation, tmdb, onClose, onSubmit }
       setStars(0);
       setNotes("");
       setIsFavorite(false);
+      setShowDetails(false);
       onClose();
     } finally {
       setSubmitting(false);
@@ -95,17 +98,27 @@ export function RatingModal({ visible, recommendation, tmdb, onClose, onSubmit }
 
             {comparison ? <Text style={styles.compareDiff}>{comparison.diffText}</Text> : null}
 
-            <TextField
-              label="Notes"
-              multiline
-              maxLength={500}
-              value={notes}
-              onChangeText={setNotes}
-              placeholder="Thoughts on this one..."
-              style={styles.notes}
+            <Button
+              title={submitting ? "Saving..." : stars ? "Submit rating" : "Pick stars to submit"}
+              disabled={submitting || !stars}
+              onPress={handleSubmit}
             />
 
-            <Button title={submitting ? "Saving..." : "Submit review"} disabled={submitting || !stars} onPress={handleSubmit} />
+            <Pressable onPress={() => setShowDetails((current) => !current)} style={styles.detailsToggle}>
+              <Text style={styles.detailsToggleText}>{showDetails ? "Hide note" : "Add note (optional)"}</Text>
+            </Pressable>
+
+            {showDetails ? (
+              <TextField
+                label="Notes"
+                multiline
+                maxLength={500}
+                value={notes}
+                onChangeText={setNotes}
+                placeholder="Thoughts on this one..."
+                style={styles.notes}
+              />
+            ) : null}
           </View>
         </KeyboardAvoidingView>
       </View>
@@ -128,12 +141,12 @@ function createStyles(colors: ColorScheme) {
       backgroundColor: colors.background,
       borderTopLeftRadius: 20,
       borderTopRightRadius: 20,
-      gap: spacing.lg,
+      gap: spacing.md,
       maxHeight: "92%",
       padding: spacing.lg
     },
     sheetTop: {
-      gap: spacing.lg
+      gap: spacing.md
     },
     header: {
       alignItems: "center",
@@ -182,6 +195,14 @@ function createStyles(colors: ColorScheme) {
       fontSize: 13,
       fontWeight: "700",
       textAlign: "center"
+    },
+    detailsToggle: {
+      alignItems: "center"
+    },
+    detailsToggleText: {
+      color: colors.accent,
+      fontSize: 13,
+      fontWeight: "700"
     },
     notes: {
       minHeight: 96,

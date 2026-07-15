@@ -74,6 +74,7 @@ export function QuickRatingModal({
           <Text style={styles.preview}>
             {stars ? `${formatStarRating(stars)} ★` : "Tap or drag the stars"}
           </Text>
+          <Text style={styles.hint}>Saved to your account. Inbox ratings also update friend trust.</Text>
 
           <StarRatingPicker
             compact
@@ -131,6 +132,12 @@ function createStyles(colors: ColorScheme) {
       color: colors.muted,
       fontSize: 13,
       fontWeight: "700",
+      textAlign: "center"
+    },
+    hint: {
+      color: colors.muted,
+      fontSize: 11,
+      lineHeight: 16,
       textAlign: "center"
     }
   });

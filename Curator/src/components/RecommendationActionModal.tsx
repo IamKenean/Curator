@@ -15,6 +15,7 @@ type RecommendationActionModalProps = {
   onClose: () => void;
   onWatchLater: () => void;
   onMarkWatched: () => void;
+  onPosterPress?: () => void;
 };
 
 export function RecommendationActionModal({
@@ -23,7 +24,8 @@ export function RecommendationActionModal({
   tmdb,
   onClose,
   onWatchLater,
-  onMarkWatched
+  onMarkWatched,
+  onPosterPress
 }: RecommendationActionModalProps) {
   const { colors } = useTheme();
   const styles = useMemo(() => createStyles(colors), [colors]);
@@ -45,9 +47,14 @@ export function RecommendationActionModal({
           </View>
 
           {posterUri ? (
-            <View style={styles.posterWrap}>
+            <Pressable
+              accessibilityRole="button"
+              disabled={!onPosterPress}
+              onPress={onPosterPress}
+              style={styles.posterWrap}
+            >
               <Image source={{ uri: posterUri }} style={styles.poster} />
-            </View>
+            </Pressable>
           ) : null}
 
           {tmdb ? (
