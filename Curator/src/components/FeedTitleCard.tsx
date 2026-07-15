@@ -15,16 +15,22 @@ type FeedTitleCardProps = {
   meta?: string;
   user?: Pick<UserProfile, "username" | "avatar_url">;
   onPress?: () => void;
+  onLongPress?: () => void;
 };
 
-export function FeedTitleCard({ tmdb, subtitle, meta, user, onPress }: FeedTitleCardProps) {
+export function FeedTitleCard({ tmdb, subtitle, meta, user, onPress, onLongPress }: FeedTitleCardProps) {
   const { colors } = useTheme();
   const styles = useMemo(() => createStyles(colors), [colors]);
   const posterUri = tmdb?.poster_path ? `${posterBaseUrl}${tmdb.poster_path}` : undefined;
   const posterHeight = FEED_CARD_WIDTH * 1.45;
 
   return (
-    <Pressable disabled={!onPress} onPress={onPress} style={({ pressed }) => [styles.card, pressed && onPress && styles.cardPressed]}>
+    <Pressable
+      disabled={!onPress && !onLongPress}
+      onPress={onPress}
+      onLongPress={onLongPress}
+      style={({ pressed }) => [styles.card, pressed && onPress && styles.cardPressed]}
+    >
       {posterUri ? (
         <Image source={{ uri: posterUri }} style={[styles.poster, { height: posterHeight }]} />
       ) : (

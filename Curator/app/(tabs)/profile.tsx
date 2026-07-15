@@ -4,12 +4,16 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { Alert, Image, Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
 import { ContentSubTabs } from "../../src/components/ContentSubTabs";
 import { EmptyState } from "../../src/components/EmptyState";
+import { FilmDetailModal } from "../../src/components/FilmDetailModal";
 import { CreateListModal } from "../../src/components/lists/CreateListModal";
 import { ListsPanel } from "../../src/components/lists/ListsPanel";
+import { MovieSearchModal } from "../../src/components/MovieSearchModal";
+import { RankingsPanel } from "../../src/components/rankings/RankingsPanel";
 import { Screen } from "../../src/components/Screen";
 import { SettingsModal } from "../../src/components/SettingsModal";
 import { TabTopBar, TabTopBarSide } from "../../src/components/TabTopBar";
 import { UserAvatar } from "../../src/components/UserAvatar";
+import { WatchlistPanel } from "../../src/components/WatchlistPanel";
 import {
   createCuratorList,
   deleteCuratorList,
@@ -22,13 +26,14 @@ import {
 } from "../../src/lib/curatorLists";
 import { formatStarRating, trustScoreToPercent } from "../../src/lib/ratings";
 import { getRecommendationStats, getSentRecommendations, getTrustScores } from "../../src/lib/recommendations";
+import { addToWatchlist, getWatchlist, removeFromWatchlist, type WatchlistItem } from "../../src/lib/watchlist";
 import { useAuth } from "../../src/providers/AuthProvider";
 import { useTheme } from "../../src/providers/ThemeProvider";
 import type { ColorScheme } from "../../src/theme";
 import { posterBaseUrl, spacing } from "../../src/theme";
-import type { RatedRecommendation, TrustScore } from "../../src/types";
+import type { RatedRecommendation, TrustScore, TmdbSearchResult } from "../../src/types";
 
-const PROFILE_SUB_TABS = ["Profile", "Reviews", "Lists", "Journal"] as const;
+const PROFILE_SUB_TABS = ["Profile", "Rankings", "Lists", "Watchlist"] as const;
 const RECENT_PUT_ONS_LIMIT = 8;
 const POSTER_WIDTH = 72;
 const AVATAR_SIZE = 72;
@@ -148,10 +153,13 @@ export default function ProfileScreen() {
   const [trustScores, setTrustScores] = useState<TrustScore[]>([]);
   const [recentPutOns, setRecentPutOns] = useState<RatedRecommendation[]>([]);
   const [lists, setLists] = useState<CuratorList[]>([]);
+  const [watchlist, setWatchlist] = useState<WatchlistItem[]>([]);
   const [activeSubTab, setActiveSubTab] = useState<(typeof PROFILE_SUB_TABS)[number]>("Profile");
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [listFormOpen, setListFormOpen] = useState(false);
   const [editingList, setEditingList] = useState<CuratorList | null>(null);
+  const [watchlistSearchOpen, setWatchlistSearchOpen] = useState(false);
+  const [watchlistFilm, setWatchlistFilm] = useState<TmdbSearchResult | null>(null);
 
   const load = useCallback(async () => {
     if (!user) {
@@ -159,11 +167,12 @@ export default function ProfileScreen() {
     }
 
     try {
-      const [stats, scores, sentRecs, userLists] = await Promise.all([
+      const [stats, scores, sentRecs, userLists, watchlistItems] = await Promise.all([
         getRecommendationStats(user.id),
         getTrustScores(user.id),
         getSentRecommendations(user.id),
-        getUserLists(user.id)
+        getUserLists(user.id),
+        getWatchlist(user.id)
       ]);
       setSent(stats.sent);
       setRated(stats.rated);
@@ -171,6 +180,7 @@ export default function ProfileScreen() {
       setTrustScores(scores);
       setRecentPutOns(sentRecs.slice(0, RECENT_PUT_ONS_LIMIT));
       setLists(await Promise.all(userLists.map((list) => hydrateListEntries(list))));
+      setWatchlist(watchlistItems);
     } catch (error) {
       Alert.alert("Could not load profile", (error as Error).message);
     }
@@ -265,19 +275,61 @@ export default function ProfileScreen() {
     Alert.alert("Coming soon", `${feature} is under development.`);
   }
 
+  function openWatchlistSearch() {
+    setWatchlistSearchOpen(true);
+  }
+
+  async function handleAddToWatchlist(item: TmdbSearchResult) {
+    if (!user) {
+      return;
+    }
+
+    try {
+      await addToWatchlist(user.id, item);
+      setWatchlistSearchOpen(false);
+      await load();
+    } catch (error) {
+      Alert.alert("Could not add to watchlist", (error as Error).message);
+    }
+  }
+
+  async function handleRemoveFromWatchlist(item: WatchlistItem) {
+    if (!user) {
+      return;
+    }
+
+    try {
+      await removeFromWatchlist(user.id, item);
+      await load();
+    } catch (error) {
+      Alert.alert("Could not remove from watchlist", (error as Error).message);
+    }
+  }
+
   const displayName = profile?.username ?? "curator";
   const headerTitle =
-    activeSubTab === "Lists" ? `${displayName}'s lists` : displayName;
+    activeSubTab === "Lists"
+      ? `${displayName}'s lists`
+      : activeSubTab === "Watchlist"
+        ? "Watchlist"
+        : displayName;
 
   return (
     <>
-      <Screen fill edges={["left", "right"]} contentContainerStyle={styles.screenContent}>
+      <Screen
+        fill
+        scroll={activeSubTab !== "Rankings"}
+        edges={["left", "right"]}
+        contentContainerStyle={styles.screenContent}
+      >
         <TabTopBar
           title={headerTitle}
           left={<TabTopBarSide icon="settings-outline" onPress={() => setSettingsOpen(true)} />}
           right={
             activeSubTab === "Lists" ? (
               <TabTopBarSide icon="add" onPress={openCreateList} />
+            ) : activeSubTab === "Watchlist" ? (
+              <TabTopBarSide icon="add" onPress={openWatchlistSearch} />
             ) : (
               <TabTopBarSide icon="ellipsis-horizontal" onPress={() => showComingSoon("Menu")} />
             )
@@ -297,12 +349,17 @@ export default function ProfileScreen() {
               onListLongPress={handleListLongPress}
             />
           </View>
-        ) : activeSubTab === "Reviews" || activeSubTab === "Journal" ? (
+        ) : activeSubTab === "Watchlist" ? (
           <View style={styles.mainContent}>
-            <EmptyState
-              title={`${activeSubTab} coming soon`}
-              body="This tab will mirror the home feed once reviews and journal entries ship."
+            <WatchlistPanel
+              items={watchlist}
+              onItemPress={setWatchlistFilm}
+              onItemLongPress={(item) => void handleRemoveFromWatchlist(item)}
             />
+          </View>
+        ) : activeSubTab === "Rankings" ? (
+          <View style={styles.rankingsPanel}>
+            <RankingsPanel active={activeSubTab === "Rankings"} />
           </View>
         ) : (
         <View style={styles.mainContent}>
@@ -364,7 +421,7 @@ export default function ProfileScreen() {
                         </Text>
                         <Text style={styles.scoreMeta}>{score.total_recs} predictions rated</Text>
                       </View>
-                      <Text style={styles.percent}>{trustScoreToPercent(score.score)}%</Text>
+                      <Text style={styles.percent}>{trustScoreToPercent(score.score, 1)}%</Text>
                     </View>
                   ))}
                 </View>
@@ -428,6 +485,19 @@ export default function ProfileScreen() {
         onClose={() => setSettingsOpen(false)}
         onSignOut={signOut}
       />
+
+      <MovieSearchModal
+        visible={watchlistSearchOpen}
+        subtitle="Add to watchlist"
+        onClose={() => setWatchlistSearchOpen(false)}
+        onSelect={(item) => void handleAddToWatchlist(item)}
+      />
+
+      <FilmDetailModal
+        visible={watchlistFilm != null}
+        title={watchlistFilm}
+        onClose={() => setWatchlistFilm(null)}
+      />
     </>
   );
 }
@@ -444,6 +514,10 @@ function createProfileStyles(colors: ColorScheme) {
     mainContent: {
       flexGrow: 1,
       gap: spacing.sm
+    },
+    rankingsPanel: {
+      flex: 1,
+      minHeight: 0
     },
     profileCard: {
       backgroundColor: colors.card,

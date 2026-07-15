@@ -1,8 +1,10 @@
 import { averagePredictionAccuracy } from "./ratings";
+import { getTrustScoreSnapshot, insertCalibrationEvents } from "./calibrationEvents";
 import { cancelRecommendationReminder } from "./notifications";
 import { getTmdbTitle } from "./tmdb";
+import { upsertTitleRating } from "./titleRatings";
 import { supabase } from "./supabase";
-import type { MediaType, RatedRecommendation, Rating, Recommendation, TrustScore, UserProfile, UserRatedItem } from "../types";
+import type { CalibrationRatingSummary, MediaType, RatedRecommendation, Rating, Recommendation, TrustScore, UserProfile, UserRatedItem } from "../types";
 
 function formatRecommendationError(error: { message: string; code?: string }) {
   if (error.code === "23503") {
@@ -137,9 +139,14 @@ export async function markRecommendationWatchedAndRate(input: {
   stars: number;
   notes?: string;
   isFavorite?: boolean;
-}) {
+}): Promise<CalibrationRatingSummary | null> {
   const trimmedNotes = input.notes?.trim();
   const notes = trimmedNotes ? trimmedNotes.slice(0, 500) : null;
+
+  const trustBeforeSnapshot = await getTrustScoreSnapshot(
+    input.currentUserId,
+    input.recommendation.from_user_id
+  );
 
   const { error: ratingError } = await supabase.from("ratings").insert({
     recommendation_id: input.recommendation.id,
@@ -164,7 +171,43 @@ export async function markRecommendationWatchedAndRate(input: {
 
   await cancelRecommendationReminder(input.recommendation.id);
 
+  const tmdb =
+    (await getTmdbTitle(input.recommendation.tmdb_id, input.recommendation.media_type)) ?? {
+      id: input.recommendation.tmdb_id,
+      media_type: input.recommendation.media_type,
+      title: "Unknown",
+      year: "",
+      poster_path: null
+    };
+
+  try {
+    await upsertTitleRating(input.currentUserId, tmdb, {
+      stars: input.stars,
+      isFavorite: input.isFavorite,
+      source: "rec"
+    });
+  } catch {
+    // title_ratings table may not exist yet on older DBs; rec rating still succeeds.
+  }
+
   await recalculateTrustScore(input.currentUserId, input.recommendation.from_user_id);
+
+  const trustAfterSnapshot = await getTrustScoreSnapshot(
+    input.currentUserId,
+    input.recommendation.from_user_id
+  );
+  const trustAfter = trustAfterSnapshot?.score ?? trustBeforeSnapshot?.score ?? 0;
+
+  return insertCalibrationEvents({
+    recommendation: input.recommendation,
+    actualRating: input.stars,
+    notes,
+    isFavorite: Boolean(input.isFavorite),
+    recipientId: input.currentUserId,
+    senderId: input.recommendation.from_user_id,
+    trustBefore: trustBeforeSnapshot?.score ?? null,
+    trustAfter
+  });
 }
 
 export async function recalculateTrustScore(userId: string, friendId: string) {

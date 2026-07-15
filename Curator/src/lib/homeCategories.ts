@@ -1,18 +1,20 @@
 import type {
   AggregateFeedItem,
   FriendActivityFeedItem,
+  FriendsTop10Pick,
   HomeFeed,
   Recommendation,
   TrustFriendPickItem,
   TmdbSearchResult
 } from "../types";
-import { fillHomeFeedWithMocks } from "./mockHomeFeed";
+import { formatFriendsTop10Meta } from "./userRankings";
 import { getHomeFeed } from "./homeFeed";
 import { getTmdbTitle } from "./tmdb";
 import { getIncomingPendingRecommendations } from "./recommendations";
 
 export type HomeCategorySlug =
   | "inbox"
+  | "friends-top-10"
   | "friends-rated-highly"
   | "popular-this-week"
   | "new-from-friends"
@@ -67,6 +69,17 @@ export const HOME_CATEGORIES: Record<HomeCategorySlug, HomeCategoryConfig> = {
       { id: "title_az", label: "Title A–Z" }
     ],
     defaultSort: "newest"
+  },
+  "friends-top-10": {
+    slug: "friends-top-10",
+    title: "In Friends' Top 10",
+    subtitle: "Films your friends hold in their personal canon.",
+    sortOptions: [
+      { id: "rating_high", label: "Best rank" },
+      { id: "title_az", label: "Title A–Z" },
+      { id: "friend_az", label: "Friend A–Z" }
+    ],
+    defaultSort: "rating_high"
   },
   "friends-rated-highly": {
     slug: "friends-rated-highly",
@@ -191,6 +204,24 @@ function fromTrustFriend(item: TrustFriendPickItem): BookshelfItem {
   };
 }
 
+function fromFriendsTop10(item: FriendsTop10Pick): BookshelfItem {
+  const bestRank = Math.min(...item.friends.map((friend) => friend.rank_position));
+  return {
+    id: `ft10-${item.media_type}-${item.tmdb_id}`,
+    tmdb: item.tmdb,
+    subtitle:
+      item.friends.length === 1 ? "In 1 friend's top 10" : `In ${item.friends.length} friends' top 10`,
+    meta: formatFriendsTop10Meta(item),
+    sortTitle: titleOf(item.tmdb),
+    sortRating: 6 - bestRank,
+    sortDate: 0,
+    sortTrust: 0,
+    sortMatch: 0,
+    sortFriend: item.friends[0]?.username ?? "",
+    sortCount: item.friends.length
+  };
+}
+
 function fromInbox(item: Recommendation & { tmdb?: TmdbSearchResult }): BookshelfItem {
   return {
     id: item.id,
@@ -243,6 +274,8 @@ function itemsForFeed(slug: HomeCategorySlug, feed: HomeFeed, inbox: (Recommenda
   switch (slug) {
     case "inbox":
       return inbox.map(fromInbox);
+    case "friends-top-10":
+      return feed.friendsTop10.map(fromFriendsTop10);
     case "friends-rated-highly":
       return feed.friendsRatedHighly.map((item) => fromAggregate(item, "frh"));
     case "popular-this-week":
@@ -272,7 +305,7 @@ export async function loadCategoryItems(userId: string, slug: HomeCategorySlug) 
     return itemsForFeed(slug, emptyFeed(), inbox);
   }
 
-  const feed = await fillHomeFeedWithMocks(await getHomeFeed(userId), 16);
+  const feed = await getHomeFeed(userId);
   return itemsForFeed(slug, feed, []);
 }
 
@@ -283,7 +316,8 @@ function emptyFeed(): HomeFeed {
     newFromFriends: [],
     highTrustFriends: [],
     trustedRecommenders: [],
-    tasteMatches: []
+    tasteMatches: [],
+    friendsTop10: []
   };
 }
 

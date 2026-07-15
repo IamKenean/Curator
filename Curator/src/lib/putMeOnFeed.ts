@@ -1,4 +1,5 @@
 import type { UserProfile } from "../types";
+import { isMockDataEnabled } from "./mockDataSettings";
 import { supabase } from "./supabase";
 import { getDiscoveryTitlePool } from "./tmdb";
 import {
@@ -33,7 +34,7 @@ export type LeaderboardEntry = {
 export type PutMeOnFeed = {
   yourRequests: ActivePutMeOnRequest[];
   openRequests: PutMeOnRequest[];
-  gauntlet: GenreGauntlet;
+  gauntlet: GenreGauntlet | null;
   leaderboard: LeaderboardEntry[];
   backendReady: boolean;
 };
@@ -53,6 +54,46 @@ function pick(pool: import("../types").TmdbSearchResult[], start: number, count:
     picks.push(pool[(start + index) % pool.length]);
   }
   return picks;
+}
+
+function buildMockGauntlet(pool: import("../types").TmdbSearchResult[]): GenreGauntlet {
+  return {
+    id: "gauntlet-horror",
+    label: "Genre Gauntlet",
+    title: "Horror Gauntlet",
+    subtitle: "Best horror rec wins",
+    daysLeft: 5,
+    posters: pick(pool, 16, 4)
+  };
+}
+
+function buildMockLeaderboard(): LeaderboardEntry[] {
+  return [
+    {
+      rank: 1,
+      user: MOCK_USERS[3],
+      badge: "Taste God",
+      trustPercent: 94,
+      gatekeepCorrect: 18,
+      gatekeepTotal: 21
+    },
+    {
+      rank: 2,
+      user: MOCK_USERS[1],
+      badge: "Horror Queen",
+      trustPercent: 89,
+      gatekeepCorrect: 15,
+      gatekeepTotal: 17
+    },
+    {
+      rank: 3,
+      user: MOCK_USERS[0],
+      badge: "Comedy King",
+      trustPercent: 86,
+      gatekeepCorrect: 22,
+      gatekeepTotal: 28
+    }
+  ];
 }
 
 export async function getPutMeOnFeed(currentUserId: string, friends: UserProfile[]): Promise<PutMeOnFeed> {
@@ -98,45 +139,15 @@ export async function getPutMeOnFeed(currentUserId: string, friends: UserProfile
 
   openRequests.sort((a, b) => b.responseCount - a.responseCount);
 
+  const useMockData = isMockDataEnabled();
+
   return {
     yourRequests,
     openRequests,
     backendReady,
-    gauntlet: {
-      id: "gauntlet-horror",
-      label: "Genre Gauntlet",
-      title: "Horror Gauntlet",
-      subtitle: "Best horror rec wins",
-      daysLeft: 5,
-      posters: pick(pool, 16, 4)
-    },
-    leaderboard: [
-      {
-        rank: 1,
-        user: MOCK_USERS[3],
-        badge: "Taste God",
-        trustPercent: 94,
-        gatekeepCorrect: 18,
-        gatekeepTotal: 21
-      },
-      {
-        rank: 2,
-        user: MOCK_USERS[1],
-        badge: "Horror Queen",
-        trustPercent: 89,
-        gatekeepCorrect: 15,
-        gatekeepTotal: 17
-      },
-      {
-        rank: 3,
-        user: MOCK_USERS[0],
-        badge: "Comedy King",
-        trustPercent: 86,
-        gatekeepCorrect: 22,
-        gatekeepTotal: 28
-      }
-    ]
+    gauntlet: useMockData ? buildMockGauntlet(pool) : null,
+    leaderboard: useMockData ? buildMockLeaderboard() : []
   };
 }
 
-export { MAX_USER_PUT_ME_ON_REQUESTS } from "./putMeOnRequests";
+export { MAX_PUT_ME_ON_RESPONSES, MAX_USER_PUT_ME_ON_REQUESTS } from "./putMeOnRequests";

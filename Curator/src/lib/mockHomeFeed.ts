@@ -34,6 +34,7 @@ function collectUsedKeys(feed: HomeFeed) {
   feed.highTrustFriends.forEach((item) => add(item.tmdb_id, item.media_type));
   feed.trustedRecommenders.forEach((item) => add(item.tmdb_id, item.media_type));
   feed.tasteMatches.forEach((item) => add(item.tmdb_id, item.media_type));
+  feed.friendsTop10.forEach((item) => add(item.tmdb_id, item.media_type));
 
   return used;
 }
@@ -63,6 +64,7 @@ function mockAggregateItems(titles: TmdbSearchResult[], startRating = 4.5): Aggr
     media_type: tmdb.media_type,
     avg_rating: Number((startRating - (index % 3) * 0.5).toFixed(1)),
     rating_count: 2 + (index % 4),
+    is_mock: true,
     tmdb
   }));
 }
@@ -78,6 +80,7 @@ function mockFriendActivityItems(titles: TmdbSearchResult[]): FriendActivityFeed
       user_id: friend.id,
       username: friend.username,
       avatar_url: friend.avatar_url,
+      is_mock: true,
       tmdb
     };
   });
@@ -95,6 +98,7 @@ function mockTrustFriendItems(titles: TmdbSearchResult[]): TrustFriendPickItem[]
       media_type: tmdb.media_type,
       rating_value: 4.5 - (index % 2) * 0.5,
       rated_at: new Date(Date.now() - index * 24 * 60 * 60 * 1000).toISOString(),
+      is_mock: true,
       tmdb
     };
   });
@@ -106,6 +110,7 @@ function mockTasteMatchItems(titles: TmdbSearchResult[]): AggregateFeedItem[] {
     media_type: tmdb.media_type,
     avg_rating: Number((4.5 - (index % 2) * 0.5).toFixed(1)),
     match_score: Number((0.9 - index * 0.04).toFixed(2)),
+    is_mock: true,
     tmdb
   }));
 }
@@ -142,6 +147,7 @@ export async function fillHomeFeedWithMocks(feed: HomeFeed, minItems = MIN_SECTI
         media_type: tmdb.media_type,
         avg_rating: Number((4.3 - (index % 3) * 0.3).toFixed(1)),
         rating_count: 5 + index,
+        is_mock: true,
         tmdb
       }))
     ];
@@ -183,6 +189,7 @@ export async function fillHomeFeedWithMocks(feed: HomeFeed, minItems = MIN_SECTI
     newFromFriends: fillNewFromFriends(feed.newFromFriends),
     highTrustFriends: fillTrustFriends(feed.highTrustFriends),
     trustedRecommenders: fillAggregate(feed.trustedRecommenders, 24, 4.6),
-    tasteMatches: fillTaste(feed.tasteMatches)
+    tasteMatches: fillTaste(feed.tasteMatches),
+    friendsTop10: feed.friendsTop10
   };
 }

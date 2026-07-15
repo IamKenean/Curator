@@ -4,6 +4,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { ActivityIndicator, Alert, Pressable, StyleSheet, Text, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { MovieSearchModal } from "../../src/components/MovieSearchModal";
+import { FilmDetailModal } from "../../src/components/FilmDetailModal";
 import { CreatePutMeOnRequestModal } from "../../src/components/putMeOn/CreatePutMeOnRequestModal";
 import { PutMeOnGauntletCard } from "../../src/components/putMeOn/PutMeOnGauntletCard";
 import { PutMeOnLeaderboard } from "../../src/components/putMeOn/PutMeOnLeaderboard";
@@ -20,6 +21,7 @@ import {
 import { getRecOfWeekBoard, submitRecOfWeekPick, voteRecOfWeek, type RecOfWeekBoard } from "../../src/lib/recOfWeek";
 import { getFriendships, getOtherUser } from "../../src/lib/social";
 import { useAuth } from "../../src/providers/AuthProvider";
+import { useMockData } from "../../src/providers/MockDataProvider";
 import { useTheme } from "../../src/providers/ThemeProvider";
 import type { ColorScheme } from "../../src/theme";
 import { spacing } from "../../src/theme";
@@ -29,6 +31,7 @@ export default function PutMeOnScreen() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
   const { user, profile } = useAuth();
+  const { revision } = useMockData();
   const { colors } = useTheme();
   const styles = useMemo(() => createStyles(colors), [colors]);
   const [feed, setFeed] = useState<PutMeOnFeed | null>(null);
@@ -42,6 +45,7 @@ export default function PutMeOnScreen() {
   const [searchOpen, setSearchOpen] = useState(false);
   const [recOfWeekPostOpen, setRecOfWeekPostOpen] = useState(false);
   const [submittingPick, setSubmittingPick] = useState(false);
+  const [filmDetailTarget, setFilmDetailTarget] = useState<TmdbSearchResult | null>(null);
 
   const loadRecOfWeek = useCallback(
     async (friendList: UserProfile[]) => {
@@ -83,7 +87,7 @@ export default function PutMeOnScreen() {
     } finally {
       setLoading(false);
     }
-  }, [loadRecOfWeek, user]);
+  }, [loadRecOfWeek, revision, user]);
 
   useEffect(() => {
     void load();
@@ -241,11 +245,16 @@ export default function PutMeOnScreen() {
               voting={votingRecId}
               onVote={handleVoteRecOfWeek}
               onPostPick={() => setRecOfWeekPostOpen(true)}
+              onOpenFilm={setFilmDetailTarget}
             />
 
-            <PutMeOnGauntletCard gauntlet={feed.gauntlet} onAnswer={() => showComingSoon("Genre Gauntlet")} />
+            {feed.gauntlet ? (
+              <PutMeOnGauntletCard gauntlet={feed.gauntlet} onAnswer={() => showComingSoon("Genre Gauntlet")} />
+            ) : null}
 
-            <PutMeOnLeaderboard entries={feed.leaderboard} onViewAll={() => showComingSoon("Leaderboards")} />
+            {feed.leaderboard.length > 0 ? (
+              <PutMeOnLeaderboard entries={feed.leaderboard} onViewAll={() => showComingSoon("Leaderboards")} />
+            ) : null}
           </>
         ) : null}
       </Screen>
@@ -270,6 +279,12 @@ export default function PutMeOnScreen() {
           }
           void handleSubmitRecOfWeekPick(item);
         }}
+      />
+
+      <FilmDetailModal
+        visible={filmDetailTarget != null}
+        title={filmDetailTarget}
+        onClose={() => setFilmDetailTarget(null)}
       />
     </>
   );

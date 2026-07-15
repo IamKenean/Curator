@@ -1,4 +1,5 @@
 import { averagePredictionAccuracy, predictionAccuracy, trustScoreToPercent } from "./ratings";
+import { isMockDataEnabled } from "./mockDataSettings";
 import { getTmdbTitle } from "./tmdb";
 import { supabase } from "./supabase";
 import type { MediaType, TrustScore, UserProfile } from "../types";
@@ -340,7 +341,7 @@ export async function getFriendListInsights(
       activityLine: buildActivityLine(friend.id, friendRecs, ratingsByRec, currentUserId, titleByRecId),
       lastActiveAt,
       hitRateWithYou,
-      topGenres: hashGenres(friend.id, sentCount),
+      topGenres: isMockDataEnabled() ? hashGenres(friend.id, sentCount) : [],
       sentCount
     };
   });

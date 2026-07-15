@@ -66,8 +66,21 @@ export function averagePredictionAccuracy(pairs: { predicted: number; actual: nu
   return Number((sum / pairs.length).toFixed(3));
 }
 
-export function trustScoreToPercent(score: number) {
-  return Math.round(score * 100);
+export function trustScoreToPercent(score: number, decimals = 0) {
+  const pct = score * 100;
+  if (decimals <= 0) {
+    return Math.round(pct);
+  }
+
+  return Number(pct.toFixed(decimals));
+}
+
+export function trustPercentDelta(before: number | null, after: number) {
+  if (before == null) {
+    return trustScoreToPercent(after, 1);
+  }
+
+  return Number(((after - before) * 100).toFixed(1));
 }
 
 export function formatComparison(estimated: number | null | undefined, actual: number) {
@@ -76,11 +89,23 @@ export function formatComparison(estimated: number | null | undefined, actual: n
   }
 
   const diff = actual - estimated;
-  const diffText = diff === 0 ? "Exact match" : diff > 0 ? `+${diff.toFixed(1)} higher` : `${diff.toFixed(1)} lower`;
+  const diffText = diff === 0 ? "Exact match" : diff > 0 ? `+${diff.toFixed(1)} higher` : `${Math.abs(diff).toFixed(1)} lower`;
 
   return {
     estimated,
     actual,
     diffText
   };
+}
+
+export function formatTrustDeltaPercent(delta: number) {
+  if (delta > 0) {
+    return `+${delta}%`;
+  }
+
+  if (delta < 0) {
+    return `${delta}%`;
+  }
+
+  return "±0%";
 }

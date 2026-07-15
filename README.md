@@ -13,6 +13,7 @@ Repository: https://github.com/IamKenean/Curator
 - **Curator lists** — Create, share, and browse ranked title lists
 - **Friends** — Sort/filter friends, trust scores, and profile insights
 - **Themes** — Default palette, **Midnight** app theme, and poster-derived color themes
+- **Journal** — Taste ledger of completed recommendation cycles with trust delta
 - **Rec of the Week** — Weekly recommendation leaderboard (requires Supabase migration)
 - **Opening splash** — Curtain splash with rotating quotes on launch
 
@@ -76,12 +77,15 @@ Curator/                 # repo root (npm scripts live here)
    | 2 | `home-feed.sql` | Homepage feed RPCs and categories |
    | 3 | `lists.sql` | Curator lists tables and RLS |
    | 4 | `put-me-on.sql` | Put Me On requests (cross-device sync) |
-   | 5 | `rec-of-week.sql` | Rec of the Week tables |
-   | 6 | `notifications-realtime.sql` | Realtime notifications (if not in schema) |
-   | 7 | `rating-upgrade.sql` / `sender-rating-upgrade.sql` | Rating schema upgrades (existing projects only) |
-   | 8 | `fix-auth.sql` | Auth fixes (only if needed) |
+   | 5 | `calibration-events.sql` | Journal / calibration feed with trust delta |
+   | 6 | `trust-score-precision.sql` | Fix trust score 10% jump rounding (existing projects) |
+   | 7 | `recalculate-trust.sql` | Rebuild trust + journal history after precision fix |
+   | 7 | `rec-of-week.sql` | Rec of the Week tables |
+   | 8 | `notifications-realtime.sql` | Realtime notifications (if not in schema) |
+   | 9 | `rating-upgrade.sql` / `sender-rating-upgrade.sql` | Rating schema upgrades (existing projects only) |
+   | 10 | `fix-auth.sql` | Auth fixes (only if needed) |
 
-   **Minimum for local dev:** run at least `schema.sql`, `home-feed.sql`, `lists.sql`, and `put-me-on.sql`.
+   **Minimum for local dev:** run at least `schema.sql`, `home-feed.sql`, `lists.sql`, `put-me-on.sql`, `calibration-events.sql`, and `trust-score-precision.sql` (if upgrading an existing DB).
 
 ## Run locally (LAN)
 

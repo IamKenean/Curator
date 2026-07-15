@@ -12,6 +12,7 @@ import {
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import {
   MAX_PUT_ME_ON_EXAMPLE_FILMS,
+  MAX_PUT_ME_ON_RESPONSES,
   MAX_USER_PUT_ME_ON_REQUESTS,
   PUT_ME_ON_GENRES,
   PUT_ME_ON_REQUEST_DAYS,
@@ -186,7 +187,8 @@ export function CreatePutMeOnRequestModal({
             </View>
 
             <Text style={styles.hint}>
-              Tell friends what you're looking for. Active for {PUT_ME_ON_REQUEST_DAYS} days · {slotsLeft} slot
+              Tell friends what you're looking for. Closes after {MAX_PUT_ME_ON_RESPONSES} films or {PUT_ME_ON_REQUEST_DAYS}{" "}
+              days · {slotsLeft} slot
               {slotsLeft === 1 ? "" : "s"} left
             </Text>
 

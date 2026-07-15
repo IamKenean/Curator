@@ -1,6 +1,7 @@
 import { useMemo } from "react";
 import { Pressable, StyleSheet, Text, View } from "react-native";
 import type { ActivePutMeOnRequest } from "../../lib/putMeOnRequests";
+import { MAX_PUT_ME_ON_RESPONSES } from "../../lib/putMeOnRequests";
 import { useTheme } from "../../providers/ThemeProvider";
 import type { ColorScheme } from "../../theme";
 import { spacing } from "../../theme";
@@ -27,7 +28,9 @@ export function PutMeOnActiveRequestCard({ request, onLongPress }: PutMeOnActive
           <PutMeOnGenreTags genres={request.genres} />
           <Text style={styles.meta}>
             {request.audienceLabel} · {request.responseCount}{" "}
-            {request.responseCount === 1 ? "person" : "people"} put you on · {request.daysLeft} days left
+            {request.responseCount === 1 ? "person" : "people"} put you on · {request.filmCount}/{MAX_PUT_ME_ON_RESPONSES}{" "}
+            films
+            {request.isFull ? " · Closed" : ` · ${request.daysLeft} days left`}
           </Text>
           {onLongPress ? <Text style={styles.holdHint}>Hold to delete</Text> : null}
         </View>
@@ -36,7 +39,7 @@ export function PutMeOnActiveRequestCard({ request, onLongPress }: PutMeOnActive
             posters={request.hiddenPosters}
             extraCount={request.extraCount}
             size="sm"
-            hidden
+            hidden={false}
           />
         ) : (
           <View style={styles.emptyPosters}>

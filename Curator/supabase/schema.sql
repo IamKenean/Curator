@@ -44,7 +44,7 @@ create table if not exists public.ratings (
 create table if not exists public.trust_scores (
   user_id uuid not null references public.users(id) on delete cascade,
   friend_id uuid not null references public.users(id) on delete cascade,
-  score numeric(3,1) not null default 0, -- average prediction accuracy (0.0-1.0)
+  score numeric(4,3) not null default 0, -- average prediction accuracy (0.000-1.000)
   total_recs integer not null default 0,
   updated_at timestamptz not null default now(),
   primary key (user_id, friend_id)

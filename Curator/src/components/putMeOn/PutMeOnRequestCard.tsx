@@ -1,6 +1,7 @@
 import { useMemo } from "react";
 import { Pressable, StyleSheet, Text, View } from "react-native";
 import type { PutMeOnRequest } from "../../lib/putMeOnRequests";
+import { MAX_PUT_ME_ON_RESPONSES } from "../../lib/putMeOnRequests";
 import { useTheme } from "../../providers/ThemeProvider";
 import type { ColorScheme } from "../../theme";
 import { spacing } from "../../theme";
@@ -34,9 +35,12 @@ export function PutMeOnRequestCard({ request, onPutThemOn }: PutMeOnRequestCardP
 
       <Text style={styles.prompt}>"{request.prompt}"</Text>
       <PutMeOnGenreTags genres={request.genres} />
-      <Text style={styles.meta}>{request.responseCount} people put them on</Text>
+      <Text style={styles.meta}>
+        {request.responseCount} {request.responseCount === 1 ? "person" : "people"} put them on · {request.filmCount}/
+        {MAX_PUT_ME_ON_RESPONSES} films
+      </Text>
 
-      <HiddenPosterRow posters={request.hiddenPosters} extraCount={request.extraCount} size="md" hidden />
+      <HiddenPosterRow posters={request.hiddenPosters} extraCount={request.extraCount} size="md" hidden={false} />
 
       <PutMeOnExampleFilms films={request.exampleFilms} />
 

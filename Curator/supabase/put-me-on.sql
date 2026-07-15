@@ -61,6 +61,11 @@ as $$
       public.is_friend_of(viewer, request.owner_id)
       and request.expires_at > now()
       and (
+        select count(*)
+        from public.put_me_on_responses response
+        where response.request_id = request.id
+      ) < 4
+      and (
         request.audience = 'all_friends'
         or viewer = any(request.friend_ids)
       )
@@ -110,6 +115,11 @@ create policy "Friends can respond to put me on requests"
       where r.id = request_id
         and r.expires_at > now()
         and public.is_friend_of(auth.uid(), r.owner_id)
+        and (
+          select count(*)
+          from public.put_me_on_responses response
+          where response.request_id = r.id
+        ) < 4
         and (
           r.audience = 'all_friends'
           or auth.uid() = any(r.friend_ids)

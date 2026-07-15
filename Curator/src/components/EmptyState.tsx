@@ -3,8 +3,19 @@ import { StyleSheet, Text, View } from "react-native";
 import { useTheme } from "../providers/ThemeProvider";
 import type { ColorScheme } from "../theme/colorSchemes";
 import { spacing } from "../theme";
+import { Button } from "./Button";
 
-export function EmptyState({ title, body }: { title: string; body?: string }) {
+export function EmptyState({
+  title,
+  body,
+  actionLabel,
+  onAction
+}: {
+  title: string;
+  body?: string;
+  actionLabel?: string;
+  onAction?: () => void;
+}) {
   const { colors } = useTheme();
   const styles = useMemo(() => createStyles(colors), [colors]);
 
@@ -12,6 +23,7 @@ export function EmptyState({ title, body }: { title: string; body?: string }) {
     <View style={styles.wrap}>
       <Text style={styles.title}>{title}</Text>
       {body ? <Text style={styles.body}>{body}</Text> : null}
+      {actionLabel && onAction ? <Button title={actionLabel} onPress={onAction} /> : null}
     </View>
   );
 }

@@ -46,8 +46,7 @@ function createStyles(colors: ColorScheme) {
   return StyleSheet.create({
     wrap: {
       gap: spacing.xs,
-      marginTop: spacing.xs,
-      opacity: 0.82
+      marginTop: spacing.xs
     },
     label: {
       color: colors.muted,
@@ -67,11 +66,10 @@ function createStyles(colors: ColorScheme) {
     poster: {
       backgroundColor: colors.border,
       height: POSTER_HEIGHT,
-      opacity: 0.88,
       width: POSTER_WIDTH
     },
     posterFallback: {
-      opacity: 0.5
+      backgroundColor: colors.border
     }
   });
 }

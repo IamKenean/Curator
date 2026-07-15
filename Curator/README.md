@@ -19,6 +19,13 @@ Run in the Supabase SQL editor, in order:
 2. `supabase/home-feed.sql`
 3. `supabase/lists.sql`
 4. `supabase/put-me-on.sql`
+5. `supabase/calibration-events.sql`
+6. `supabase/title-ratings.sql` — standalone server ratings + unlock count RPC
+7. `supabase/user-rankings.sql` — Top 10 canon + reorder RPC
+8. `supabase/ranking-list-types.sql` — genre/theme lists (run after user-rankings on existing DBs)
+9. Re-run `supabase/home-feed.sql` (adds `friends_top_10` to feed bundle)
+10. `supabase/trust-score-precision.sql` (existing DBs only — fixes 10% trust jumps)
+11. `supabase/recalculate-trust.sql` (optional — rebuilds trust + journal from old ratings)
 
 Optional: `rec-of-week.sql`, `notifications-realtime.sql`, and upgrade scripts for existing databases.
 
